@@ -49,6 +49,10 @@ APP_USERS=manish:choose-a-password,priya:another-password,rahul:third-password
 
 Usernames are lowercase letters/digits; passwords need 6+ characters and no commas. Each person's brands stay private to their username. When `APP_USERS` is set it replaces the shared `APP_ACCESS_CODE`.
 
+## Evaluation tab
+
+Tab "4 · Evaluation" tests the agent on 4 brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 32 posts. Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
+
 ## Deploy publicly
 
 The app is one container serving on `$PORT` (default 7860). Two easy hosts:

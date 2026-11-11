@@ -1,0 +1,11 @@
+gradio==6.31.0
+numpy>=1.26
+requests>=2.31
+pypdf>=4.0
+python-docx>=1.1
+python-dotenv>=1.0
+# Light ONNX embeddings (no PyTorch). Python 3.15 has no onnxruntime wheel yet, so on
+# a bleeding-edge laptop use sentence-transformers instead (the app auto-detects it).
+fastembed>=0.4; python_version < "3.14"
+# Free web search for "Discover on the web" (optional - Wikipedia + site pages work without it)
+ddgs>=9.0

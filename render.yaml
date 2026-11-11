@@ -1,0 +1,18 @@
+# Render Blueprint. Secrets are entered in the Render dashboard (sync: false), never stored here.
+# Free instances have an ephemeral disk: brands/knowledge reset on redeploy or idle restart.
+# For persistence, use a paid plan, add a disk mounted at /data and set DATA_DIR=/data.
+services:
+  - type: web
+    name: brand-content-agent
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: APP_ACCESS_CODE
+        sync: false
+      - key: GEN_PER_USER_DAY
+        value: "25"
+      - key: GEN_GLOBAL_DAY
+        value: "300"

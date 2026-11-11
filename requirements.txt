@@ -9,3 +9,5 @@ python-dotenv>=1.0
 fastembed>=0.4; python_version < "3.14"
 # Free web search for "Discover on the web" (optional - Wikipedia + site pages work without it)
 ddgs>=9.0
+# Streamlit front end (streamlit_app.py); the Gradio app (app.py) does not need it
+streamlit>=1.40

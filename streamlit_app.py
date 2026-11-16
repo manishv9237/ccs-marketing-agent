@@ -50,11 +50,30 @@ ss = st.session_state
 # Hide Streamlit's whole toolbar (Share, star, edit, GitHub, three-dot menu and its Print/Record items).
 # The light/dark choice is offered on the page itself (theme_switcher below), which drives Streamlit's own
 # theme setting through the hidden menu. One flush-left line so Markdown never shows the CSS as text.
-_CSS = ('<style>[data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stDecoration"], '
-        '.stAppDeployButton, footer {display: none !important;} '
-        '[data-testid="stMainMenu"] {visibility: hidden !important; position: absolute !important;} '
-        '[data-baseweb="popover"]:has([data-testid^="stMainMenuItem"]) {opacity: 0 !important; pointer-events: none !important;} '
-        '.block-container {padding-top: 2rem;}</style>')
+_CSS = ("<style>"
+        "[data-testid=\"stToolbarActions\"], [data-testid=\"stAppDeployButton\"], [data-testid=\"stDecoration\"], .stAppDeployButton, footer {display: none !important;} "
+        "[data-testid=\"stMainMenu\"] {visibility: hidden !important; position: absolute !important;} "
+        "[data-baseweb=\"popover\"]:has([data-testid^=\"stMainMenuItem\"]) {opacity: 0 !important; pointer-events: none !important;} "
+        ".block-container {padding-top: 1.6rem; max-width: 1080px;} "
+        "h1, h2, h3 {letter-spacing: -0.01em;} "
+        ".bca-kicker {font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.6; margin: 0 0 0.15rem 0;} "
+        ".bca-title {font-size: 2rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.2rem 0;} "
+        ".bca-sub {opacity: 0.75; margin: 0 0 0.9rem 0;} "
+        ".bca-steps {display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.2rem 0 1rem 0;} "
+        ".bca-step {border: 1px solid rgba(128,128,128,0.35); border-radius: 999px; padding: 0.18rem 0.75rem; font-size: 0.82rem;} "
+        ".bca-step.done {border-color: #2e8b57; color: #2e8b57; font-weight: 600;} "
+        ".bca-step.now {border-color: #c0392b; color: #c0392b; font-weight: 600;} "
+        ".bca-strip {display: flex; gap: 1.4rem; flex-wrap: wrap; border: 1px solid rgba(128,128,128,0.3); border-radius: 12px; padding: 0.6rem 1rem; margin: 0.4rem 0 1rem 0; font-size: 0.85rem;} "
+        ".bca-strip b {display: block; font-size: 1.05rem;} "
+        ".bca-pill {display: inline-block; border-radius: 999px; padding: 0.05rem 0.6rem; font-size: 0.75rem; font-weight: 600;} "
+        ".bca-good {background: rgba(46,139,87,0.16); color: #2e8b57;} "
+        ".bca-ok {background: rgba(214,137,16,0.16); color: #d68910;} "
+        ".bca-thin {background: rgba(192,57,43,0.16); color: #c0392b;} "
+        "div[data-testid=\"stForm\"], div[data-testid=\"stExpander\"] {border-radius: 12px !important;} "
+        "div[data-testid=\"stTabs\"] button[role=\"tab\"] {font-weight: 600; padding: 0.6rem 1rem;} "
+        ".stButton > button, .stDownloadButton > button, [data-testid=\"stFormSubmitButton\"] > button {border-radius: 10px; font-weight: 600;} "
+        "textarea {border-radius: 10px !important;}"
+        "</style>")
 st.markdown(_CSS, unsafe_allow_html=True)
 
 try:
@@ -197,8 +216,9 @@ _sp2, _th2 = st.columns([4, 2])
 with _th2:
     theme_switcher()
 top = st.columns([5, 1])
-top[0].title("Brand Content Agent")
-top[0].caption("Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand's own documents and web sources, not from guesswork.")
+top[0].markdown('<p class="bca-kicker">Brief in · Reviewed copy out</p><p class="bca-title">Brand Content Agent</p>'
+                '<p class="bca-sub">Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand\'s own documents and web sources, not from guesswork.</p>',
+                unsafe_allow_html=True)
 top[1].write(f"Signed in as **{ss.get('display', user)}**")
 if top[1].button("Log out"):
     ss.clear()
@@ -217,7 +237,17 @@ if ids:
 else:
     st.info("No brands yet. Create one in the Brand tab.")
 
-t_brand, t_know, t_gen, t_eval = st.tabs(["1 · Brand", "2 · Knowledge", "3 · Generate", "4 · Evaluation"])
+_docs_now, _ = safe(svc.list_documents, user, brand_id) if brand_id else (None, None)
+_n_docs = len(_docs_now or [])
+_s1 = "done" if brand_id else "now"
+_s2 = "done" if _n_docs else ("now" if brand_id else "")
+_s3 = "now" if (brand_id and _n_docs) else ""
+st.markdown('<div class="bca-steps">'
+            f'<span class="bca-step {_s1}">{"✓ " if brand_id else "1 "}Brand kit</span>'
+            f'<span class="bca-step {_s2}">{"✓ " if _n_docs else "2 "}Source library</span>'
+            f'<span class="bca-step {_s3}">3 New brief</span></div>', unsafe_allow_html=True)
+
+t_brand, t_know, t_gen, t_eval = st.tabs(["1 · Brand kit", "2 · Source library", "3 · New brief", "4 · Evaluation"])
 
 # ------------------------------------------------------------------ brand
 with t_brand:
@@ -225,6 +255,14 @@ with t_brand:
         c1, c2 = st.columns(2)
         b_name = c1.text_input("Brand name", max_chars=80, placeholder="e.g. Acme Foods")
         b_ind = c2.selectbox("Industry cluster", list(INDUSTRY_CLUSTERS), index=None, placeholder="Choose the closest cluster")
+        k1, k2 = st.columns(2)
+        b_aud = k1.text_input("Target audience", max_chars=200, placeholder="e.g. urban families, 25-40")
+        b_pos = k2.text_input("Positioning in one line", max_chars=200, placeholder="e.g. everyday health, made simple")
+        t1, t2, t3 = st.columns(3)
+        tone_a = t1.select_slider("Tone: register", ["Formal", "Balanced", "Casual"], value="Balanced")
+        tone_b = t2.select_slider("Tone: energy", ["Reserved", "Balanced", "Bold"], value="Balanced")
+        tone_c = t3.select_slider("Tone: feel", ["Factual", "Balanced", "Emotive"], value="Balanced")
+        b_avoid = st.text_input("Words to avoid", max_chars=200, placeholder="comma separated, e.g. cheap, guaranteed")
         b_notes = st.text_area("Brand voice & guidelines (optional)", max_chars=8000, height=110,
                                placeholder="Tone of voice, words you always/never use, audience, positioning, taglines…")
         create = st.form_submit_button("Create brand", type="primary")
@@ -234,7 +272,10 @@ with t_brand:
         if not b_ind:
             flash("brand", err(StoreError("Choose an industry cluster.")))
         else:
-            b, e = safe(svc.create_brand, user, b_name, b_ind, b_notes)
+            _kit = [f"Target audience: {b_aud}" if b_aud else "", f"Positioning: {b_pos}" if b_pos else "",
+                    "Tone: " + ", ".join(x for x in (tone_a, tone_b, tone_c) if x and x != "Balanced") if any(x and x != "Balanced" for x in (tone_a, tone_b, tone_c)) else "",
+                    f"Words to avoid: {b_avoid}" if b_avoid else "", b_notes or ""]
+            b, e = safe(svc.create_brand, user, b_name, b_ind, "\n".join(x for x in _kit if x))
             if e:
                 flash("brand", e)
             else:
@@ -302,14 +343,22 @@ with t_know:
                 st.rerun()
         show_flash("know")
 
-        st.subheader("What this brand knows")
+        st.subheader("Source library")
+        st.caption("Content can only claim what these sources say. Status shows where the library is thin before you generate.")
         docs, e = safe(svc.list_documents, user, brand_id)
         if e:
             st.markdown(e)
         elif not docs:
             st.caption("No knowledge yet. Upload files, paste URLs or discover sources on the web.")
         else:
-            st.dataframe([{"Source": (d["source"] or d["name"])[:90], "Type": d["kind"], "Chunks": d["chunks"]} for d in docs], hide_index=True, use_container_width=True)
+            def _status(n):
+                return "Good" if n >= 20 else ("Adequate" if n >= 8 else "Thin")
+            st.dataframe([{"Source": (d["source"] or d["name"])[:90], "Type": d["kind"], "Chunks": d["chunks"], "Status": _status(d["chunks"])} for d in docs],
+                         hide_index=True, use_container_width=True)
+            _total = sum(d["chunks"] for d in docs)
+            st.markdown(f'Total **{_total}** chunks from **{len(docs)}** sources &nbsp; <span class="bca-pill bca-{ {"Good": "good", "Adequate": "ok", "Thin": "thin"}[_status(_total)] }">{_status(_total)}</span>', unsafe_allow_html=True)
+            if _total < 20:
+                st.warning("Thin library: very little to ground claims on. Add more documents or pages, or expect cautious, general copy.")
             dmap = {d["doc_id"]: f"{d['name'][:60]} ({d['kind']})" for d in docs}
             rc = st.columns([4, 1])
             gone = rc[0].selectbox("Remove a document", list(dmap), index=None, format_func=lambda i: dmap[i], placeholder="Pick a document")
@@ -323,12 +372,16 @@ with t_gen:
     if not brand_id:
         st.info("Create or select a brand first.")
     else:
+        st.markdown("#### 1 · What's the campaign?")
         c1, c2, c3 = st.columns(3)
         platform = c1.selectbox("Platform", list(PLATFORMS), format_func=lambda k: PLATFORMS[k]["label"])
         model = c2.selectbox("Model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model))
         n = c3.slider("Variations", 1, 5, 2)
         goal = st.text_area("Campaign goal", max_chars=500, height=70, placeholder="e.g. Drive sign-ups for the summer launch")
         brief = st.text_area("Brief / context (optional)", max_chars=2000, height=90, placeholder="Key message, offer, audience, dates, things to mention or avoid…")
+        st.markdown('<div class="bca-strip">'
+                    f'<div>Pieces<b>{int(n)}</b></div><div>Est. time<b>~{max(1, int(n)) * 1} to 2 min</b></div>'
+                    f'<div>Today\'s quota<b>{u["generations_left"]} left</b></div><div>Model<b>{model}</b></div></div>', unsafe_allow_html=True)
         with st.expander("Advanced retrieval"):
             g_topk = st.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k)
             g_hybrid = st.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1)
@@ -345,6 +398,9 @@ with t_gen:
             out = g["out"]
             st.caption(f"Model **{out['model']}** · retrieval {out['retrieval_ms']:.0f} ms · generation {out['generation_ms'] / 1000:.1f} s · "
                        f"{len(out['sources'])} sources · {'hybrid' if out['semantic'] else 'keyword-only'} search")
+            _ver = sum(1 for v in out["variations"] if v.get("verified") and not v.get("unsupported"))
+            st.markdown(f'**{_ver} of {len(out["variations"])}** variations fully grounded in your sources'
+                        + (" · review the flagged ones before posting" if _ver < len(out["variations"]) else ""))
             for v in out["variations"]:
                 cites = ", ".join(f"S{x}" for x in v["sources"]) or "—"
                 st.markdown(f"**Variation {v['number']} · {v['angle']}**  \n_{v['length']} · sources: {cites}_")

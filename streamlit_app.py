@@ -47,11 +47,42 @@ ss = st.session_state
 
 
 # ------------------------------------------------------------------ look and feel
-# Hide Streamlit's toolbar actions (Share, star, edit, GitHub) and the deploy button; the three-dot menu stays
-# so people can still switch between light and dark mode (Settings). One flush-left line so Markdown never shows it as text.
+# Hide Streamlit's whole toolbar (Share, star, edit, GitHub, three-dot menu and its Print/Record items).
+# The light/dark choice is offered on the page itself (theme_switcher below), which drives Streamlit's own
+# theme setting through the hidden menu. One flush-left line so Markdown never shows the CSS as text.
 _CSS = ('<style>[data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stDecoration"], '
-        '.stAppDeployButton, footer {display: none !important;} .block-container {padding-top: 2rem;}</style>')
+        '.stAppDeployButton, footer {display: none !important;} '
+        '[data-testid="stMainMenu"] {visibility: hidden !important; position: absolute !important;} '
+        '[data-baseweb="popover"]:has([data-testid^="stMainMenuItem"]) {opacity: 0 !important; pointer-events: none !important;} '
+        '.block-container {padding-top: 2rem;}</style>')
 st.markdown(_CSS, unsafe_allow_html=True)
+
+try:
+    from streamlit.components.v1 import html as _components_html  # noqa: E402
+except Exception:  # not available in the test stand-in
+    def _components_html(*a, **k):
+        return None
+
+_THEME_JS = """<script>(async () => {
+  const d = window.parent.document, sleep = t => new Promise(r => setTimeout(r, t));
+  const btn = d.querySelector('[data-testid="stMainMenuButton"]'); if (!btn) return;
+  btn.click();
+  for (let i = 0; i < 20; i++) {
+    const it = d.querySelector('[data-testid="stMainMenuItem-theme-__T__"]');
+    if (it) { it.click(); break; }
+    await sleep(100);
+  }
+  await sleep(250); btn.click();
+})();</script>"""
+
+
+def theme_switcher() -> None:
+    """System / Light / Dark shown directly on the page (no three-dot menu)."""
+    opts = ["System", "Light", "Dark"]
+    choice = st.radio("Theme", opts, index=opts.index(ss.get("theme_applied", "System")), horizontal=True, label_visibility="collapsed") or "System"
+    if ss.get("theme_applied", "System") != choice:
+        ss["theme_applied"] = choice
+        _components_html(_THEME_JS.replace("__T__", choice), height=0)
 
 
 # ------------------------------------------------------------------ login / sign up
@@ -66,6 +97,9 @@ def login_screen() -> None:
     if not can_login_env and not s.signup_enabled and not s.allow_no_auth:
         st.error("Not configured: enable sign-up or set APP_USERS / APP_ACCESS_CODE in the app's secrets.")
         st.stop()
+    _sp, _th = st.columns([3, 2])
+    with _th:
+        theme_switcher()
     left, mid, right = st.columns([1, 2, 1])
     with mid:
         st.title("Brand Content Agent")
@@ -159,6 +193,9 @@ def safe(fn, *a, **kw):
 # ----------------------------------------------------------------- header
 u = svc.usage(user)
 sem = {True: "semantic + keyword", False: "keyword-only (embedding model unavailable)", None: "loading embedding model…"}[u["semantic_search"]]
+_sp2, _th2 = st.columns([4, 2])
+with _th2:
+    theme_switcher()
 top = st.columns([5, 1])
 top[0].title("Brand Content Agent")
 top[0].caption("Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand's own documents and web sources, not from guesswork.")

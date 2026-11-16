@@ -54,6 +54,11 @@ class Settings:
 
     # --- storage ------------------------------------------------------------
     data_dir: Path
+    supabase_url: str
+    signup_enabled: bool
+    signup_code: str  # optional invite code required to sign up
+    signup_per_day: int
+    supabase_service_key: str
 
     # --- abuse limits (per UTC day unless noted) ---------------------------------
     gen_per_user_day: int
@@ -114,6 +119,11 @@ def get_settings() -> Settings:
         openai_embed_model=os.getenv("OPENAI_EMBED_MODEL", "").strip() or "text-embedding-3-small",
         search_provider=os.getenv("SEARCH_PROVIDER", "auto").strip().lower() or "auto",
         data_dir=Path(os.getenv("DATA_DIR", "").strip() or "./data").resolve(),
+        supabase_url=os.getenv("SUPABASE_URL", "").strip().rstrip("/"),
+        signup_enabled=os.getenv("SIGNUP_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"),
+        signup_code=os.getenv("SIGNUP_CODE", "").strip(),
+        signup_per_day=_int("SIGNUP_PER_DAY", 30),
+        supabase_service_key=os.getenv("SUPABASE_SERVICE_KEY", "").strip(),
         gen_per_user_day=_int("GEN_PER_USER_DAY", 25),
         gen_global_day=_int("GEN_GLOBAL_DAY", 400),
         search_per_user_day=_int("SEARCH_PER_USER_DAY", 30),

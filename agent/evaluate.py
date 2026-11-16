@@ -208,6 +208,8 @@ def write_csv(svc, user: str, rows: list[dict], params: dict) -> str:
         keep = svc.s.data_dir / "evals" / user
         keep.mkdir(parents=True, exist_ok=True)
         (keep / tmp.name).write_bytes(tmp.read_bytes())
+        if getattr(svc, "sync", None) is not None:
+            svc.sync.push_file(user, f"evals/{tmp.name}", keep / tmp.name)
     except OSError:
         pass
     return str(tmp)
@@ -257,3 +259,38 @@ def setup_brands_stream(svc, user: str):
         yield "\n\n".join(log)
     log.append("Done. Open the brand list to see them, then run the evaluation.")
     yield "\n\n".join(log)
+
+
+# --------------------------------------------------------------------------- past runs
+def list_past_runs(svc, user: str) -> list[dict]:
+    """Saved evaluation CSVs for this user, newest first: [{name, path, scored, failed, params}]."""
+    keep = svc.s.data_dir / "evals" / user
+    keep.mkdir(parents=True, exist_ok=True)
+    if getattr(svc, "sync", None) is not None:
+        svc.sync.restore(user, "evals", keep)
+    out = []
+    for p in sorted(keep.glob("evaluation-*.csv"), reverse=True):
+        try:
+            rows, params = load_run(p)
+        except (OSError, ValueError, KeyError):
+            continue
+        out.append({"name": p.name, "path": str(p), "scored": sum(1 for r in rows if not r["error"]), "failed": sum(1 for r in rows if r["error"]), "params": params})
+    return out
+
+
+def load_run(path) -> tuple[list[dict], dict]:
+    """Read a saved CSV back into rows (numbers converted) and the run settings."""
+    rows = []
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for r in csv.DictReader(f):
+            for c in CRITERIA:
+                r[c] = int(float(r[c])) if r.get(c) not in (None, "") else None
+            wl = r.get("within_limit")
+            r["within_limit"] = True if wl == "True" else False if wl == "False" else None
+            r["error"] = r.get("error") or ""
+            rows.append(r)
+    if not rows:
+        raise ValueError("empty")
+    first = rows[0]
+    params = {"gen_model": first["gen_model"], "judge_model": first["judge_model"], "top_k": first["top_k"], "hybrid": first["hybrid"]}
+    return rows, params

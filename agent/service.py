@@ -18,6 +18,8 @@ from .extract import ExtractError, bytes_to_text, file_to_text
 from .limits import LimitReached, UsageLimiter
 from .llm import LLMError, chat
 from .security import FetchError, UrlBlocked, safe_get
+from . import persist
+from .accounts import AccountStore
 from .store import StoreError, WorkspaceStore
 
 # Exceptions whose message is safe and useful to show to the end user.
@@ -36,7 +38,7 @@ class IngestResult:
 
 
 class Service:
-    def __init__(self, settings: Settings | None = None, *, llm_fn=None, fetch_fn=None, search_fn=None, wiki_fn=None, embedder=_UNSET):
+    def __init__(self, settings: Settings | None = None, *, llm_fn=None, fetch_fn=None, search_fn=None, wiki_fn=None, embedder=_UNSET, sync=_UNSET):
         self.s = settings or get_settings()
         self.limiter = UsageLimiter(self.s)
         self._llm = llm_fn or chat
@@ -44,14 +46,21 @@ class Service:
         self._search_fn = search_fn
         self._wiki_fn = wiki_fn
         self._embedder_override = embedder
+        self.sync = sync if sync is not _UNSET else persist.from_settings(self.s)
 
     # -------------------------------------------------------------- plumbing
     @property
     def embedder(self):
         return get_embedder(self.s) if self._embedder_override is _UNSET else self._embedder_override
 
+    @property
+    def accounts(self) -> AccountStore:
+        if not hasattr(self, "_accounts"):
+            self._accounts = AccountStore(self.s, self.sync)
+        return self._accounts
+
     def store(self, user: str) -> WorkspaceStore:
-        return WorkspaceStore(self.s, user)
+        return WorkspaceStore(self.s, user, self.sync)
 
     def usage(self, user: str) -> dict:
         if self._embedder_override is _UNSET:  # never block a page load on model loading

@@ -74,10 +74,18 @@ def _atomic_write(path: Path, writer) -> None:
 
 
 class WorkspaceStore:
-    def __init__(self, settings: Settings, username: str) -> None:
+    def __init__(self, settings: Settings, username: str, sync=None) -> None:
         self.s = settings
+        self.user = username
+        self.sync = sync  # optional agent.persist backend; None = files only
         self.root = settings.data_dir / "workspaces" / username
         self.root.mkdir(parents=True, exist_ok=True)
+        if self.sync is not None:
+            self.sync.restore(username, "workspaces", self.root)  # fills in anything missing locally
+
+    def _push(self, brand_id: str) -> None:
+        if self.sync is not None:
+            self.sync.push_dir(self.user, f"workspaces/{brand_id}", self.root / brand_id)
 
     # ------------------------------------------------------------------ paths
     def _dir(self, brand_id: str) -> Path:
@@ -134,11 +142,14 @@ class WorkspaceStore:
             d = self.root / brand_id
             d.mkdir(parents=True)
             self._write_meta(d, {"brand_id": brand_id, "name": name, "industry": industry or "General", "created": time.time(), "docs": [], "embedder_id": None})
+            self._push(brand_id)
         return self.get_brand(brand_id)
 
     def delete_brand(self, brand_id: str) -> None:
         with _LOCK:
             shutil.rmtree(self._dir(brand_id))
+            if self.sync is not None:
+                self.sync.delete_prefix(self.user, f"workspaces/{brand_id}")
 
     # -------------------------------------------------------------- documents
     def list_documents(self, brand_id: str) -> list[dict]:
@@ -172,6 +183,7 @@ class WorkspaceStore:
             doc = {"doc_id": doc_id, "name": name, "kind": kind, "source": source, "chunks": len(chunks), "added": time.time()}
             meta["docs"].append(doc)
             self._write_meta(d, meta)
+            self._push(brand_id)
             return doc
 
     def delete_document(self, brand_id: str, doc_id: str) -> None:
@@ -188,6 +200,7 @@ class WorkspaceStore:
             self._write_chunks(d, [chunks[i] for i in keep])
             meta["docs"] = [x for x in meta["docs"] if x["doc_id"] != doc_id]
             self._write_meta(d, meta)
+            self._push(brand_id)
 
     # -------------------------------------------------------------- retrieval
     def retrieve(self, brand_id: str, query: str, top_k: int, hybrid_weight: float, embedder: Embedder | None) -> list[dict]:

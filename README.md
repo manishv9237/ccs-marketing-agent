@@ -115,3 +115,16 @@ agent/llm.py      OpenAI client that adapts to newer model parameters
 agent/generate.py platform rules, prompt, JSON parsing, length checks
 tests/            48 offline tests
 ```
+
+## Keeping data across restarts (optional Supabase)
+Free hosts wipe the data folder on restart. To keep brands and evaluation results:
+1. Create a free project at supabase.com (a project you own; do not reuse paused ones).
+2. SQL Editor → New query → paste `supabase/schema.sql` → Run (creates `workspace_files`, row-level security on).
+3. Project Settings → API: copy the Project URL and the `service_role` key.
+4. On Streamlit Cloud → Settings → Secrets add:
+   `SUPABASE_URL = "https://xxxx.supabase.co"` and `SUPABASE_SERVICE_KEY = "..."` (the service key bypasses security rules: keep it only in Secrets, never in GitHub or chat).
+5. Reboot the app. Brands you create now survive restarts; they are restored when the user logs in. Without these two secrets the app behaves exactly as before.
+Embedding vectors are stored too, so restored brands work immediately. Past evaluation runs appear under Evaluation → "Past runs".
+
+## Sign up and log in (Streamlit app)
+The login page has two tabs: **Log in** (email or username + password) and **Sign up** (first name, last name, email, password). Accounts are stored as one JSON file each (salted scrypt hash, never the password) under `DATA_DIR/accounts/`, and copied to Supabase (`workspace_files`, owner `_accounts`) when `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` are set; without Supabase they vanish when a free host resets its disk. Accounts from `APP_USERS` still work (log in with the username). Set `SIGNUP_CODE` to require an invite code, `SIGNUP_ENABLED=0` to close sign-up, `SIGNUP_PER_DAY` to cap new accounts per day. Streamlit's own toolbar (Share, star, edit, GitHub, menu) is hidden with CSS and `toolbarMode = "minimal"`; the owner-only "Manage app" button is added by Streamlit Cloud and cannot be removed from code.

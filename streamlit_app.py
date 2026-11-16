@@ -24,6 +24,8 @@ from agent.config import get_settings  # noqa: E402
 from agent.extract import SUPPORTED_FILE_TYPES  # noqa: E402
 from agent.generate import PLATFORMS  # noqa: E402
 from agent.industries import INDUSTRY_CLUSTERS  # noqa: E402
+from agent.accounts import AccountError  # noqa: E402
+from agent.limits import LimitReached  # noqa: E402
 from agent.security import check_login, normalize_username  # noqa: E402
 from agent.service import USER_ERRORS, Service  # noqa: E402
 from agent.store import StoreError  # noqa: E402
@@ -44,24 +46,75 @@ s = svc.s
 ss = st.session_state
 
 
-# ------------------------------------------------------------------ login
+# ------------------------------------------------------------------ look and feel
+# Hide Streamlit's own toolbar (Share, star, edit, GitHub, menu) for a clean product look.
+st.markdown(
+    """
+    <style>
+    [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stMainMenu"],
+    [data-testid="stAppDeployButton"], [data-testid="stDecoration"], #MainMenu, footer {display: none !important;}
+    .block-container {padding-top: 2rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ------------------------------------------------------------------ login / sign up
+def _open_session(uid: str, display: str) -> None:
+    ss["user"] = uid
+    ss["display"] = display
+    st.rerun()
+
+
 def login_screen() -> None:
-    st.title("Brand Content Agent")
-    if not s.users and not s.access_code and not s.allow_no_auth:
-        st.error("Not configured: set APP_USERS (username:password list) or APP_ACCESS_CODE in the app's secrets.")
+    can_login_env = bool(s.users or s.access_code)
+    if not can_login_env and not s.signup_enabled and not s.allow_no_auth:
+        st.error("Not configured: enable sign-up or set APP_USERS / APP_ACCESS_CODE in the app's secrets.")
         st.stop()
-    st.caption("Log in with the username and password you were given. Your brands are private to your username." if s.users
-               else "Enter a display name and the shared access code. Your brands are private to your display name.")
-    with st.form("login"):
-        name = st.text_input("Username")
-        pw = st.text_input("Password" if s.users else "Access code", type="password")
-        if st.form_submit_button("Log in", type="primary"):
-            user = normalize_username(name)
-            if user and check_login(name, pw, s):
-                ss["user"] = user
-                st.rerun()
-            else:
-                st.error("Incorrect username or password.")
+    left, mid, right = st.columns([1, 2, 1])
+    with mid:
+        st.title("Brand Content Agent")
+        st.caption("Grounded marketing copy from your brand's own sources. Your brands are private to your account.")
+        tab_in, tab_up = st.tabs(["Log in", "Sign up"]) if s.signup_enabled else (st.container(), None)
+        with tab_in:
+            with st.form("login"):
+                ident = st.text_input("Email or username")
+                pw = st.text_input("Password", type="password")
+                if st.form_submit_button("Log in", type="primary"):
+                    ident = (ident or "").strip()
+                    if "@" in ident:
+                        acct = svc.accounts.verify(ident, pw)
+                        if acct:
+                            _open_session(acct["id"], acct["name"])
+                    else:
+                        uname = normalize_username(ident)
+                        if uname and check_login(ident, pw, s):
+                            _open_session(uname, uname)
+                    st.error("Incorrect email/username or password.")
+        if tab_up is not None:
+            with tab_up:
+                with st.form("signup"):
+                    c1, c2 = st.columns(2)
+                    first = c1.text_input("First name")
+                    last = c2.text_input("Last name")
+                    email = st.text_input("Email address")
+                    pw1 = st.text_input("Create password (at least 8 characters)", type="password")
+                    pw2 = st.text_input("Confirm password", type="password")
+                    code = st.text_input("Invite code") if s.signup_code else ""
+                    if st.form_submit_button("Sign up", type="primary"):
+                        acct = None
+                        try:
+                            svc.limiter.consume("_signup", "signup", s.signup_per_day)  # blunt abuse cap
+                            try:
+                                acct = svc.accounts.sign_up(first, last, email, pw1, pw2, code)
+                            except AccountError:
+                                svc.limiter.refund("_signup", "signup")
+                                raise
+                        except (AccountError, LimitReached) as exc:
+                            st.error(str(exc))
+                        if acct:
+                            _open_session(acct["id"], acct["name"])
     st.stop()
 
 
@@ -115,7 +168,7 @@ sem = {True: "semantic + keyword", False: "keyword-only (embedding model unavail
 top = st.columns([5, 1])
 top[0].title("Brand Content Agent")
 top[0].caption("Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand's own documents and web sources, not from guesswork.")
-top[1].write(f"Signed in as **{user}**")
+top[1].write(f"Signed in as **{ss.get('display', user)}**")
 if top[1].button("Log out"):
     ss.clear()
     st.rerun()
@@ -333,5 +386,16 @@ with t_eval:
             st.success(res["msg"])
             st.markdown(res["summary"])
             st.download_button("Download results (CSV)", res["csv"], file_name=res["name"], mime="text/csv")
+
+    st.divider()
+    with st.expander("Past runs (saved results)"):
+        runs = ev.list_past_runs(svc, user)
+        if not runs:
+            st.caption("No saved runs yet. Finished runs are saved automatically.")
+        else:
+            pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['name']} · top-k {r['params']['top_k']} · hybrid {r['params']['hybrid']} · {r['scored']} scored", key="past_run")
+            rows_p, params_p = ev.load_run(pick["path"])
+            st.markdown(ev.summary_markdown(rows_p, params_p))
+            st.download_button("Download this run (CSV)", Path(pick["path"]).read_bytes(), file_name=pick["name"], mime="text/csv", key="past_dl")
 
 st.caption("Demo build. Generated copy is a draft: verify facts against the sources before publishing. Content you add is stored on the server and may be visible to the operators.")

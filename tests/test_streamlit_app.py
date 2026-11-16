@@ -145,7 +145,7 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     svc.s = dataclasses.replace(svc.s, users={"priya": "secret1"}, access_code="", allow_no_auth=False)
     run_script(fake, monkeypatch, svc)
     assert "user" not in fake.session_state
-    fake.values = {"Username": "priya", "Password": "wrong"}
+    fake.values = {"Email or username": "priya", "Password": "wrong"}
     fake.clicks = {"Log in"}
     run_script(fake, monkeypatch, svc)
     assert "user" not in fake.session_state and any("Incorrect" in x for x in fake.log)
@@ -188,3 +188,34 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     fake.clicks = {"Log out"}
     run_script(fake, monkeypatch, svc)
     assert "user" not in fake.session_state
+
+
+def test_signup_then_login_and_private_workspace(svc, monkeypatch):
+    import dataclasses
+    svc.s = dataclasses.replace(svc.s, users={}, access_code="", allow_no_auth=False, signup_enabled=True, signup_code="", signup_per_day=5)
+    fake = FakeSt()
+    # mismatched passwords are rejected
+    fake.values = {"First name": "Priya", "Last name": "S", "Email address": "priya@example.com",
+                   "Create password (at least 8 characters)": "longenough1", "Confirm password": "different"}
+    fake.clicks = {"Sign up"}
+    run_script(fake, monkeypatch, svc)
+    assert "user" not in fake.session_state and any("do not match" in x for x in fake.log)
+    # a proper sign-up logs the person in straight away
+    fake.values["Confirm password"] = "longenough1"
+    fake.clicks = {"Sign up"}
+    run_script(fake, monkeypatch, svc)
+    uid = fake.session_state["user"]
+    assert uid.startswith("u") and fake.session_state["display"] == "Priya"
+    # log out, then log back in with e-mail + password; wrong password fails
+    fake.clicks = {"Log out"}
+    run_script(fake, monkeypatch, svc)
+    fake.values = {"Email or username": "priya@example.com", "Password": "nope"}
+    fake.clicks = {"Log in"}
+    run_script(fake, monkeypatch, svc)
+    assert "user" not in fake.session_state
+    fake.values["Password"] = "longenough1"
+    fake.clicks = {"Log in"}
+    run_script(fake, monkeypatch, svc)
+    assert fake.session_state["user"] == uid
+    # the toolbar is hidden by the page CSS
+    assert any("stToolbar" in x for x in fake.log)

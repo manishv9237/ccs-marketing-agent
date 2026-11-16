@@ -218,4 +218,4 @@ def test_signup_then_login_and_private_workspace(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     assert fake.session_state["user"] == uid
     # the toolbar is hidden by the page CSS
-    assert any("stToolbar" in x for x in fake.log)
+    assert any("stToolbarActions" in x for x in fake.log)

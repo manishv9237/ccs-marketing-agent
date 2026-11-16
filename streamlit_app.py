@@ -47,17 +47,11 @@ ss = st.session_state
 
 
 # ------------------------------------------------------------------ look and feel
-# Hide Streamlit's own toolbar (Share, star, edit, GitHub, menu) for a clean product look.
-st.markdown(
-    """
-    <style>
-    [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stMainMenu"],
-    [data-testid="stAppDeployButton"], [data-testid="stDecoration"], #MainMenu, footer {display: none !important;}
-    .block-container {padding-top: 2rem;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+# Hide Streamlit's toolbar actions (Share, star, edit, GitHub) and the deploy button; the three-dot menu stays
+# so people can still switch between light and dark mode (Settings). One flush-left line so Markdown never shows it as text.
+_CSS = ('<style>[data-testid="stToolbarActions"], [data-testid="stAppDeployButton"], [data-testid="stDecoration"], '
+        '.stAppDeployButton, footer {display: none !important;} .block-container {padding-top: 2rem;}</style>')
+st.markdown(_CSS, unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ login / sign up

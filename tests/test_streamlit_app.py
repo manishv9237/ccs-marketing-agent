@@ -92,6 +92,12 @@ class FakeSt:
     def slider(self, label, lo, hi, value=None, step=None, **kw):
         return self.values.get(label, value)
 
+    def chat_input(self, *a, **kw):
+        return self.values.pop("chat_input", None)
+
+    def chat_message(self, *a, **kw):
+        return Ctx(self)
+
     def file_uploader(self, *a, **kw):
         return []
 
@@ -168,8 +174,7 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     assert svc.list_documents("priya", brands[0]["brand_id"])
 
     # generate
-    fake.values["Campaign goal"] = "Announce the solar factory"
-    fake.clicks = {"Generate content"}
+    fake.values["chat_input"] = "Announce the solar factory"
     run_script(fake, monkeypatch, svc)
     assert fake.session_state["gen_out"]["out"]["variations"][0]["content"].startswith("Solar powered")
     assert not fake.session_state.get("gen_err")

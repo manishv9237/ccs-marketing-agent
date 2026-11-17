@@ -31,7 +31,7 @@ from agent.service import USER_ERRORS, Service  # noqa: E402
 from agent.store import StoreError  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-st.set_page_config(page_title="Brand Content Agent", page_icon="✍️", layout="wide")
+st.set_page_config(page_title="BrandVoice AI", page_icon="💬", layout="wide")
 
 
 @st.cache_resource(show_spinner=False)
@@ -54,7 +54,7 @@ _CSS = ("<style>"
         "[data-testid=\"stToolbarActions\"], [data-testid=\"stAppDeployButton\"], [data-testid=\"stDecoration\"], .stAppDeployButton, footer {display: none !important;} "
         "[data-testid=\"stMainMenu\"] {visibility: hidden !important; position: absolute !important;} "
         "[data-baseweb=\"popover\"]:has([data-testid^=\"stMainMenuItem\"]) {opacity: 0 !important; pointer-events: none !important;} "
-        ".block-container {padding-top: 1.6rem; max-width: 1080px;} "
+        ".block-container {padding-top: 3.6rem; max-width: 1080px;} "
         "h1, h2, h3 {letter-spacing: -0.01em;} "
         ".bca-kicker {font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.6; margin: 0 0 0.15rem 0;} "
         ".bca-title {font-size: 2rem; font-weight: 700; line-height: 1.15; margin: 0 0 0.2rem 0;} "
@@ -62,17 +62,19 @@ _CSS = ("<style>"
         ".bca-steps {display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.2rem 0 1rem 0;} "
         ".bca-step {border: 1px solid rgba(128,128,128,0.35); border-radius: 999px; padding: 0.18rem 0.75rem; font-size: 0.82rem;} "
         ".bca-step.done {border-color: #2e8b57; color: #2e8b57; font-weight: 600;} "
-        ".bca-step.now {border-color: #c0392b; color: #c0392b; font-weight: 600;} "
+        ".bca-step.now {border-color: #5b4bdb; color: #5b4bdb; font-weight: 600;} "
         ".bca-strip {display: flex; gap: 1.4rem; flex-wrap: wrap; border: 1px solid rgba(128,128,128,0.3); border-radius: 12px; padding: 0.6rem 1rem; margin: 0.4rem 0 1rem 0; font-size: 0.85rem;} "
         ".bca-strip b {display: block; font-size: 1.05rem;} "
         ".bca-pill {display: inline-block; border-radius: 999px; padding: 0.05rem 0.6rem; font-size: 0.75rem; font-weight: 600;} "
         ".bca-good {background: rgba(46,139,87,0.16); color: #2e8b57;} "
         ".bca-ok {background: rgba(214,137,16,0.16); color: #d68910;} "
-        ".bca-thin {background: rgba(192,57,43,0.16); color: #c0392b;} "
+        ".bca-thin {background: rgba(192,57,43,0.16); color: #5b4bdb;} "
         "div[data-testid=\"stForm\"], div[data-testid=\"stExpander\"] {border-radius: 12px !important;} "
         "div[data-testid=\"stTabs\"] button[role=\"tab\"] {font-weight: 600; padding: 0.6rem 1rem;} "
         ".stButton > button, .stDownloadButton > button, [data-testid=\"stFormSubmitButton\"] > button {border-radius: 10px; font-weight: 600;} "
-        "textarea {border-radius: 10px !important;}"
+        "textarea {border-radius: 10px !important;} "
+        "[data-testid=\"stChatMessage\"] {border: 1px solid rgba(128,128,128,0.25); border-radius: 16px; padding: 0.8rem 1rem; margin-bottom: 0.7rem;} "
+        "[data-testid=\"stChatInput\"] {border-radius: 16px;}"
         "</style>")
 st.markdown(_CSS, unsafe_allow_html=True)
 
@@ -121,8 +123,8 @@ def login_screen() -> None:
         theme_switcher()
     left, mid, right = st.columns([1, 2, 1])
     with mid:
-        st.title("Brand Content Agent")
-        st.caption("Grounded marketing copy from your brand's own sources. Your brands are private to your account.")
+        st.markdown('<p class="bca-kicker">BrandVoice AI</p><p class="bca-title">BrandVoice AI</p>'
+                    '<p class="bca-sub">Your AI partner for smarter, on-brand marketing</p>', unsafe_allow_html=True)
         tab_in, tab_up = st.tabs(["Log in", "Sign up"]) if s.signup_enabled else (st.container(), None)
         with tab_in:
             with st.form("login"):
@@ -216,7 +218,7 @@ _sp2, _th2 = st.columns([4, 2])
 with _th2:
     theme_switcher()
 top = st.columns([5, 1])
-top[0].markdown('<p class="bca-kicker">Brief in · Reviewed copy out</p><p class="bca-title">Brand Content Agent</p>'
+top[0].markdown('<p class="bca-kicker">Your AI partner for smarter, on-brand marketing</p><p class="bca-title">BrandVoice AI</p>'
                 '<p class="bca-sub">Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand\'s own documents and web sources, not from guesswork.</p>',
                 unsafe_allow_html=True)
 top[1].write(f"Signed in as **{ss.get('display', user)}**")
@@ -245,9 +247,9 @@ _s3 = "now" if (brand_id and _n_docs) else ""
 st.markdown('<div class="bca-steps">'
             f'<span class="bca-step {_s1}">{"✓ " if brand_id else "1 "}Brand kit</span>'
             f'<span class="bca-step {_s2}">{"✓ " if _n_docs else "2 "}Source library</span>'
-            f'<span class="bca-step {_s3}">3 New brief</span></div>', unsafe_allow_html=True)
+            f'<span class="bca-step {_s3}">3 Chat</span></div>', unsafe_allow_html=True)
 
-t_brand, t_know, t_gen, t_eval = st.tabs(["1 · Brand kit", "2 · Source library", "3 · New brief", "4 · Evaluation"])
+t_gen, t_brand, t_know, t_eval = st.tabs(["Chat", "Brand kit", "Source library", "Evaluation"])
 
 # ------------------------------------------------------------------ brand
 with t_brand:
@@ -367,54 +369,74 @@ with t_know:
                 flash("know", e or "🗑️ Removed.")
                 st.rerun()
 
-# --------------------------------------------------------------- generate
+# ------------------------------------------------------------------- chat
+def render_out(out: dict, platform: str, key: str) -> None:
+    st.caption(f"Model **{out['model']}** · retrieval {out['retrieval_ms']:.0f} ms · generation {out['generation_ms'] / 1000:.1f} s · "
+               f"{len(out['sources'])} sources · {'hybrid' if out['semantic'] else 'keyword-only'} search")
+    _ver = sum(1 for v in out["variations"] if v.get("verified") and not v.get("unsupported"))
+    st.markdown(f'**{_ver} of {len(out["variations"])}** variations fully grounded in your sources'
+                + (" · review the flagged ones before posting" if _ver < len(out["variations"]) else ""))
+    for v in out["variations"]:
+        cites = ", ".join(f"S{x}" for x in v["sources"]) or "—"
+        st.markdown(f"**Variation {v['number']} · {v['angle']}**  \n_{v['length']} · sources: {cites}_")
+        if v["brand_note"]:
+            st.markdown(f"> {v['brand_note']}")
+        if v.get("unsupported"):
+            st.warning("Not found in your sources (check before posting): " + "; ".join(v["unsupported"]))
+        elif v.get("verified"):
+            st.success("Fact-check: claims match the sources")
+        st.text_area(f"{PLATFORMS[platform]['label']} post {v['number']} (select and copy)", value=v["content"], height=180, key=f"{key}_post_{v['number']}")
+    with st.expander("Sources used (check every claim against these)"):
+        for i, sr in enumerate(out["sources"], 1):
+            snippet = sr["text"][:320].replace("\n", " ")
+            st.markdown(f"**S{i}** · `{sr['source'][:80]}` · score {sr['score']}\n> {snippet}{'…' if len(sr['text']) > 320 else ''}")
+
+
 with t_gen:
-    if not brand_id:
-        st.info("Create or select a brand first.")
-    else:
-        st.markdown("#### 1 · What's the campaign?")
-        c1, c2, c3 = st.columns(3)
-        platform = c1.selectbox("Platform", list(PLATFORMS), format_func=lambda k: PLATFORMS[k]["label"])
-        model = c2.selectbox("Model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model))
-        n = c3.slider("Variations", 1, 5, 2)
-        goal = st.text_area("Campaign goal", max_chars=500, height=70, placeholder="e.g. Drive sign-ups for the summer launch")
-        brief = st.text_area("Brief / context (optional)", max_chars=2000, height=90, placeholder="Key message, offer, audience, dates, things to mention or avoid…")
-        st.markdown('<div class="bca-strip">'
-                    f'<div>Pieces<b>{int(n)}</b></div><div>Est. time<b>~{max(1, int(n)) * 1} to 2 min</b></div>'
-                    f'<div>Today\'s quota<b>{u["generations_left"]} left</b></div><div>Model<b>{model}</b></div></div>', unsafe_allow_html=True)
-        with st.expander("Advanced retrieval"):
+    with st.chat_message("assistant"):
+        if not brand_id:
+            st.markdown("Hi, I'm **BrandVoice AI**. Let's start by creating your brand in the **Brand kit** tab, then I'll help you write on-brand posts.")
+        elif not _n_docs:
+            st.markdown("Brand is ready. Next, add some sources in the **Source library** tab (documents, web pages or URLs) so I can ground every claim.")
+        else:
+            st.markdown("Hi, I'm **BrandVoice AI**. Pick a platform below, then tell me the campaign goal in the box at the bottom, for example: "
+                        "*Drive sign-ups for the summer launch*. I'll write variations from your sources and fact-check them.")
+    if brand_id:
+        with st.expander("Chat settings"):
+            c1, c2, c3 = st.columns(3)
+            platform = c1.selectbox("Platform", list(PLATFORMS), format_func=lambda k: PLATFORMS[k]["label"])
+            model = c2.selectbox("Model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model))
+            n = c3.slider("Variations", 1, 5, 2)
+            brief = st.text_area("Brief / context (optional)", max_chars=2000, height=90, placeholder="Key message, offer, audience, dates, things to mention or avoid…")
             g_topk = st.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k)
             g_hybrid = st.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1)
-        if st.button("Generate content", type="primary"):
-            with st.spinner("Generating and fact-checking (this can take up to two minutes)…"):
-                out, e = safe(svc.generate, user, brand_id, platform, goal, brief, int(n), model, int(g_topk), float(g_hybrid))
+        hist = ss.setdefault("chat", {}).setdefault(brand_id, [])
+        for i, m in enumerate(hist):
+            with st.chat_message(m["role"]):
+                if m["role"] == "user":
+                    st.markdown(m["text"])
+                elif m.get("error"):
+                    st.markdown(m["error"])
+                else:
+                    render_out(m["out"], m["platform"], f"h{i}")
+        prompt = st.chat_input("Describe your campaign goal, e.g. Drive sign-ups for the summer launch")
+        if prompt:
+            hist.append({"role": "user", "text": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Writing and fact-checking (this can take up to two minutes)…"):
+                    out, e = safe(svc.generate, user, brand_id, platform, prompt, brief, int(n), model, int(g_topk), float(g_hybrid))
+            if out:
+                hist.append({"role": "assistant", "out": out, "platform": platform})
+            else:
+                hist.append({"role": "assistant", "error": e or "⚠️ Nothing was generated."})
             ss["gen_out"] = {"out": out, "platform": platform} if out else None
             ss["gen_err"] = e
             st.rerun()
-        if ss.get("gen_err"):
-            st.markdown(ss["gen_err"])
-        g = ss.get("gen_out")
-        if g:
-            out = g["out"]
-            st.caption(f"Model **{out['model']}** · retrieval {out['retrieval_ms']:.0f} ms · generation {out['generation_ms'] / 1000:.1f} s · "
-                       f"{len(out['sources'])} sources · {'hybrid' if out['semantic'] else 'keyword-only'} search")
-            _ver = sum(1 for v in out["variations"] if v.get("verified") and not v.get("unsupported"))
-            st.markdown(f'**{_ver} of {len(out["variations"])}** variations fully grounded in your sources'
-                        + (" · review the flagged ones before posting" if _ver < len(out["variations"]) else ""))
-            for v in out["variations"]:
-                cites = ", ".join(f"S{x}" for x in v["sources"]) or "—"
-                st.markdown(f"**Variation {v['number']} · {v['angle']}**  \n_{v['length']} · sources: {cites}_")
-                if v["brand_note"]:
-                    st.markdown(f"> {v['brand_note']}")
-                if v.get("unsupported"):
-                    st.warning("Not found in your sources (check before posting): " + "; ".join(v["unsupported"]))
-                elif v.get("verified"):
-                    st.success("Fact-check: claims match the sources")
-                st.text_area(f"{PLATFORMS[g['platform']]['label']} post {v['number']} (select and copy)", value=v["content"], height=180, key=f"post_{v['number']}")
-            with st.expander("Sources used (check every claim against these)"):
-                for i, sr in enumerate(out["sources"], 1):
-                    snippet = sr["text"][:320].replace("\n", " ")
-                    st.markdown(f"**S{i}** · `{sr['source'][:80]}` · score {sr['score']}\n> {snippet}{'…' if len(sr['text']) > 320 else ''}")
+        if hist and st.button("New chat"):
+            hist.clear()
+            st.rerun()
 
 # ------------------------------------------------------------- evaluation
 with t_eval:

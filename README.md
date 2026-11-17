@@ -1,5 +1,5 @@
 ---
-title: Brand Content Agent
+title: BrandVoice AI
 emoji: ✍️
 colorFrom: indigo
 colorTo: purple
@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# Brand Content Agent
+# BrandVoice AI
 
 A RAG agent that writes **brand-grounded** marketing content (LinkedIn, X, Instagram, email) from a brand's own documents and web sources.
 

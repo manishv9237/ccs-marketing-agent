@@ -123,7 +123,7 @@ def login_screen() -> None:
         theme_switcher()
     left, mid, right = st.columns([1, 2, 1])
     with mid:
-        st.markdown('<p class="bca-kicker">BrandVoice AI</p><p class="bca-title">BrandVoice AI</p>'
+        st.markdown('<p class="bca-title">BrandVoice AI</p>'
                     '<p class="bca-sub">Your AI partner for smarter, on-brand marketing</p>', unsafe_allow_html=True)
         tab_in, tab_up = st.tabs(["Log in", "Sign up"]) if s.signup_enabled else (st.container(), None)
         with tab_in:
@@ -237,19 +237,12 @@ if ids:
     brand_id = st.selectbox("Active brand", ids, index=ids.index(ss["sel_brand"]), format_func=lambda i: labels[i])
     ss["sel_brand"] = brand_id
 else:
-    st.info("No brands yet. Create one in the Brand tab.")
+    pass
 
 _docs_now, _ = safe(svc.list_documents, user, brand_id) if brand_id else (None, None)
 _n_docs = len(_docs_now or [])
-_s1 = "done" if brand_id else "now"
-_s2 = "done" if _n_docs else ("now" if brand_id else "")
-_s3 = "now" if (brand_id and _n_docs) else ""
-st.markdown('<div class="bca-steps">'
-            f'<span class="bca-step {_s1}">{"✓ " if brand_id else "1 "}Brand kit</span>'
-            f'<span class="bca-step {_s2}">{"✓ " if _n_docs else "2 "}Source library</span>'
-            f'<span class="bca-step {_s3}">3 Chat</span></div>', unsafe_allow_html=True)
 
-t_gen, t_brand, t_know, t_eval = st.tabs(["Chat", "Brand kit", "Source library", "Evaluation"])
+t_brand, t_know, t_gen, t_eval = st.tabs(["1 · Brand kit", "2 · Source library", "3 · New brief", "4 · Evaluation"])
 
 # ------------------------------------------------------------------ brand
 with t_brand:
@@ -395,9 +388,9 @@ def render_out(out: dict, platform: str, key: str) -> None:
 with t_gen:
     with st.chat_message("assistant"):
         if not brand_id:
-            st.markdown("Hi, I'm **BrandVoice AI**. Let's start by creating your brand in the **Brand kit** tab, then I'll help you write on-brand posts.")
+            st.markdown("Hi, I'm **BrandVoice AI**. Let's start by creating your brand in the **1 · Brand kit** tab, then I'll help you write on-brand posts.")
         elif not _n_docs:
-            st.markdown("Brand is ready. Next, add some sources in the **Source library** tab (documents, web pages or URLs) so I can ground every claim.")
+            st.markdown("Brand is ready. Next, add some sources in the **2 · Source library** tab (documents, web pages or URLs) so I can ground every claim.")
         else:
             st.markdown("Hi, I'm **BrandVoice AI**. Pick a platform below, then tell me the campaign goal in the box at the bottom, for example: "
                         "*Drive sign-ups for the summer launch*. I'll write variations from your sources and fact-check them.")

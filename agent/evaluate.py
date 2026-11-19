@@ -1,8 +1,9 @@
 """Evaluation harness for the professor's brief: test across brands from different sectors,
 the four platforms and several campaign goals; generator and judge are different models.
 
-Test set: 4 brands x 4 platforms x 2 goals = 32 items. Every item is one post, so each
-category has 32 items (8 per brand, 8 per platform, 8 per goal), above the 30 minimum.
+Test set: 8 brands (8 sectors) x 4 platforms x 2 goals = 64 items. Every item is one post: 8 per brand,
+16 per platform, 16 per goal. Any prefix stays balanced: the first 32 items
+already give 4 per brand, 8 per platform and 8 per goal (above the 30 minimum).
 Items are ordered so that any prefix of the list stays balanced across brands and platforms.
 """
 from __future__ import annotations
@@ -26,6 +27,10 @@ EVAL_BRANDS = [
     {"name": "Marico", "industry": "FMCG & Consumer Brands", "domain": "marico.com"},
     {"name": "HDFC Bank", "industry": "BFSI", "domain": "hdfcbank.com"},
     {"name": "Infosys", "industry": "Technology & Digital Products", "domain": "infosys.com"},
+    {"name": "Apollo Hospitals", "industry": "Healthcare & Life Sciences", "domain": "apollohospitals.com"},
+    {"name": "Tata Motors", "industry": "Automotive & Mobility", "domain": "tatamotors.com"},
+    {"name": "IndiGo", "industry": "Travel & Hospitality", "domain": "goindigo.in"},
+    {"name": "Tata Power", "industry": "Energy & Sustainability", "domain": "tatapower.com"},
 ]
 EVAL_GOALS = [
     ("launch", "Announce a new product, feature or service launch"),

@@ -651,14 +651,14 @@ elif page == "Evaluate" and SHOW_EVALUATE:
     st.markdown(
         f"- {'✅' if _g in _allowed else '⚠️'} Generator is one of the allowed models (`{_g}`); plain RAG, no agent loop\n"
         f"- {'✅' if _j and _j != _g and _j in _allowed else '⚠️'} A *different* allowed model judges (`{_j or 'not chosen yet'}`)\n"
-        f"- ✅ Diverse brands (Swiggy, Marico, HDFC Bank, Infosys) × 4 platforms (LinkedIn, X, Instagram, Email) × 4 campaign goals\n"
+        f"- ✅ Diverse brands (" + ", ".join(b["name"] for b in ev.EVAL_BRANDS) + f") × 4 platforms (LinkedIn, X, Instagram, Email) × 4 campaign goals\n"
         f"- {'✅' if len(_runs) else '⚠️'} At least 30 test items per run (a full run is 32; subsets under 30 don't count)\n"
         f"- {'✅' if len(_combos) >= 3 else '⚠️'} Retrieval parameters varied: **{len(_combos)}** different top-k / hybrid settings saved so far (aim for 4 to 5)")
     st.divider()
-    st.markdown("Tests the agent on **4 brands from different sectors x 4 platforms x 4 goal types** (32 posts, each scored 1 to 5 by a *different* model as judge). "
+    st.markdown(f"Tests the agent on **{len(ev.EVAL_BRANDS)} major brands from different sectors x 4 platforms x 4 goal types** ({ev.MAX_ITEMS} posts in a full run; 32 is enough for the guideline minimum; each scored 1 to 5 by a *different* model as judge). "
                 "Step 1 loads the brands from their official websites and Wikipedia. Step 2 runs the test and gives a CSV. "
                 "**Don't click anything else while a step is running.**")
-    if st.button("Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"):
+    if st.button("Step 1: Set up the evaluation brands"):
         box = st.empty()
         try:
             for text in ev.setup_brands_stream(svc, user):
@@ -674,7 +674,7 @@ elif page == "Evaluate" and SHOW_EVALUATE:
     judge_default = next((m for m in ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna") if m in judge_opts and m != s.default_model), s.default_model)
     e_judge = c2.selectbox("Judge model (must differ)", judge_opts, index=judge_opts.index(judge_default), key="e_judge")
     d1, d2, d3 = st.columns(3)
-    e_n = d1.slider("Test items (32 = full run)", 4, ev.MAX_ITEMS, ev.MAX_ITEMS, 4)
+    e_n = d1.slider(f"Test items ({ev.MAX_ITEMS} = full run)", 4, ev.MAX_ITEMS, min(32, ev.MAX_ITEMS), 4)
     e_topk = d2.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="e_topk")
     e_hybrid = d3.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="e_hybrid")
     if st.button("Step 2: Run evaluation", type="primary"):

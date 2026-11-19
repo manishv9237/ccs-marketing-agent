@@ -214,10 +214,10 @@ def test_login_required_then_full_journey(svc, monkeypatch):
 
     # evaluation has its own (testing-only) page
     fake.session_state["nav"] = "Evaluate"
-    fake.clicks = {"Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"}
+    fake.clicks = {"Step 1: Set up the evaluation brands"}
     run_script(fake, monkeypatch, svc)
-    assert len(svc.list_brands("priya")) == 5
-    fake.values["Test items (32 = full run)"] = 8
+    assert len(svc.list_brands("priya")) == 9
+    fake.values["Test items (64 = full run)"] = 8
     fake.clicks = {"Step 2: Run evaluation"}
     run_script(fake, monkeypatch, svc)
     res = fake.session_state["eval_result"]

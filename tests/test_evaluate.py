@@ -30,12 +30,13 @@ def svc(settings):
 
 def test_items_are_balanced():
     items = ev.build_items()
-    assert len(items) == 32
-    for key in ("brand", "platform", "goal_id"):
-        assert set(Counter(i[key] for i in items).values()) == {8}, key
-    assert len({(i["brand"], i["platform"], i["goal_id"]) for i in items}) == 32  # no duplicates
-    half = Counter(i["platform"] for i in ev.build_items(16))
-    assert set(half.values()) == {4}  # a partial run stays balanced across platforms
+    assert len(items) == ev.MAX_ITEMS
+    n_b = len(ev.EVAL_BRANDS)
+    for key, per in (("brand", 8), ("platform", 2 * n_b), ("goal_id", 2 * n_b)):
+        assert set(Counter(i[key] for i in items).values()) == {per}, key
+    assert len({(i["brand"], i["platform"], i["goal_id"]) for i in items}) == ev.MAX_ITEMS  # no duplicates
+    half = Counter(i["platform"] for i in ev.build_items(32))
+    assert set(half.values()) == {8}  # a partial run stays balanced across platforms
 
 
 def test_parse_scores_clamps_and_requires_numbers():
@@ -50,22 +51,22 @@ def test_setup_run_summary_and_csv(svc, tmp_path):
     assert {b["name"] for b in svc.list_brands("priya")} == {b["name"] for b in ev.EVAL_BRANDS}
     # running setup again must not duplicate brands
     list(ev.setup_brands_stream(svc, "priya"))
-    assert len(svc.list_brands("priya")) == 4
+    assert len(svc.list_brands("priya")) == len(ev.EVAL_BRANDS)
 
     params = {"gen_model": "gpt-5-nano", "judge_model": "gpt-5.4-nano", "top_k": 6, "hybrid": 0.5}
     last = None
-    for last in ev.evaluate_stream(svc, "priya", **{k: v for k, v in params.items() if k in ("gen_model", "judge_model")}, n_items=32):
+    for last in ev.evaluate_stream(svc, "priya", **{k: v for k, v in params.items() if k in ("gen_model", "judge_model")}, n_items=ev.MAX_ITEMS):
         pass
     done, total, rows = last
-    assert (done, total) == (32, 32) and not any(r["error"] for r in rows)
+    assert (done, total) == (ev.MAX_ITEMS, ev.MAX_ITEMS) and not any(r["error"] for r in rows)
     assert all(r["grounded"] == 4 for r in rows)
     md = ev.summary_markdown(rows, params)
     assert "By brand" in md and "By platform" in md and "By campaign goal" in md and "Swiggy" in md and "4.00" in md
 
     path = ev.write_csv(svc, "priya", rows, params)
     data = list(csv.DictReader(open(path, encoding="utf-8-sig")))
-    assert len(data) == 32 and data[0]["gen_model"] == "gpt-5-nano" and data[0]["judge_model"] == "gpt-5.4-nano"
-    assert svc.limiter.used("priya", "eval") == 32
+    assert len(data) == ev.MAX_ITEMS and data[0]["gen_model"] == "gpt-5-nano" and data[0]["judge_model"] == "gpt-5.4-nano"
+    assert svc.limiter.used("priya", "eval") == ev.MAX_ITEMS
 
 
 def test_validation_errors(svc):

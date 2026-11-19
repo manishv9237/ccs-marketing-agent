@@ -132,7 +132,7 @@ def get_settings() -> Settings:
         eval_global_day=_int("EVAL_GLOBAL_DAY", 800),
         eval_users=_list("EVAL_USERS", ""),
         max_upload_mb=_int("MAX_UPLOAD_MB", 10),
-        max_brands_per_user=_int("MAX_BRANDS_PER_USER", 5),
+        max_brands_per_user=_int("MAX_BRANDS_PER_USER", 12),
         max_docs_per_brand=_int("MAX_DOCS_PER_BRAND", 40),
         max_chunks_per_brand=_int("MAX_CHUNKS_PER_BRAND", 4000),
         fetch_timeout=_int("FETCH_TIMEOUT", 15),

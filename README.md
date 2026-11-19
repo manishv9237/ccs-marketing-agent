@@ -66,7 +66,7 @@ Top bar: **Add brand** (brand kit form; saving moves to Sources), **Brand kit** 
 
 ## Evaluate page (testing only; hide with SHOW_EVALUATE = False)
 
-The "Evaluate" tab in the top bar tests the agent on 4 brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 32 posts. Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
+The "Evaluate" tab in the top bar tests the agent on 8 major brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys, Apollo Hospitals, Tata Motors, IndiGo, Tata Power) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 64 posts in a full run (32 already meets the 30-per-category minimum). Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
 
 ## Deploy publicly
 

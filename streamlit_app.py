@@ -79,6 +79,7 @@ _CSS = ("<style>"
         ".st-key-topnav button:hover {background: rgba(255,255,255,0.10); color: #ffffff;} "
         ".st-key-topnav button[kind=\"primary\"] {background: #5b4bdb;} "
         ".st-key-topnav button[kind=\"primary\"] p {color: #ffffff !important; font-weight: 600;} "
+        "[data-testid=\"stToast\"] {min-width: 360px; padding: 1rem 1.3rem; border-left: 6px solid #5b4bdb; border-radius: 12px; box-shadow: 0 10px 30px rgba(28,26,46,0.35); font-size: 1.05rem; font-weight: 600;} "
         ".bca-logo {font-weight: 800; font-size: 2.1rem; line-height: 1.1; margin: -0.5rem 0 0.5rem 0; color: #5b4bdb; letter-spacing: -0.01em;} "
         ".st-key-topnav {background: #0f3d47; border-radius: 12px; padding: 0.35rem 0.8rem; margin-bottom: 1.1rem;} "
         ".bca-swatch {display: inline-block; width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.4); margin-right: 6px; vertical-align: middle;} "
@@ -198,6 +199,22 @@ def show_flash(key: str) -> None:
         st.markdown(msg)
 
 
+def notify(msg: str, icon: str = "🎉") -> None:
+    """Queue a prominent pop-up (toast) that shows on the next run (survives st.rerun)."""
+    ss["_toast"] = (msg, icon)
+
+
+def ingest_msg(res, e) -> str:
+    """Flash text for an ingest, and a pop-up when at least one source was added."""
+    if e:
+        return e
+    n = sum(1 for r in (res or []) if r.ok)
+    if n:
+        bname = next((b["name"] for b in svc.list_brands(user) if b["brand_id"] == ss.get("sel_brand")), "your brand")
+        notify(f"{n} source{'s' if n != 1 else ''} added to {bname}", "📚")
+    return fmt_results(res)
+
+
 def err(exc: Exception) -> str:
     return f"⚠️ {exc}"
 
@@ -302,7 +319,7 @@ labels = {b["brand_id"]: f"{b['name']} · {b['industry']}" for b in brands}
 if ss.get("sel_brand") not in ids:
     ss["sel_brand"] = ids[0] if ids else None
 
-PAGES = ["Add brand", "Sources", "Brand kit", "Brief", "Account"]
+PAGES = ["Add brand", "Brand kit", "Sources", "Brief", "Account"]
 if "goto" in ss:
     ss["nav"] = ss.pop("goto")
 if ss.get("nav") not in PAGES:
@@ -310,7 +327,7 @@ if ss.get("nav") not in PAGES:
 full_name = ss.get("full") or ss.get("display") or user
 st.markdown('<div class="bca-logo">BrandVoice AI</div>', unsafe_allow_html=True)
 with st.container(key="topnav"):
-    _cols = st.columns([1.1, 1, 1.1, 0.8, 3.2, 2.4])
+    _cols = st.columns([1.1, 1.1, 1, 0.8, 3.2, 2.4])
     for _c, _p in zip(_cols[0:4], PAGES[:4]):
         if _c.button(_p, key=f"nav_{_p}", type="primary" if ss["nav"] == _p else "secondary", use_container_width=True):
             ss["nav"] = _p
@@ -319,6 +336,12 @@ with st.container(key="topnav"):
         ss["nav"] = "Account"
         st.rerun()
 page = ss["nav"]
+_t = ss.pop("_toast", None)
+if _t:
+    try:
+        st.toast(_t[0], icon=_t[1], duration="long")
+    except TypeError:
+        st.toast(_t[0], icon=_t[1])
 
 
 def brand_picker(label: str = "Brand") -> str | None:
@@ -378,6 +401,7 @@ if page == "Add brand":
                 flash("brand", e)
             else:
                 ss["sel_brand"] = b["brand_id"]
+                notify(f"New brand \"{b['name']}\" created successfully", "🎉")
                 flash("know", f"✅ Saved **{b['name']}**. Now add its sources.")
                 ss["goto"] = "Sources"
         st.rerun()
@@ -401,7 +425,7 @@ elif page == "Sources":
                     p.write_bytes(f.getbuffer())
                     paths.append(str(p))
                 res, e = safe(svc.ingest_files, user, brand_id, paths)
-                flash("know", e or fmt_results(res))
+                flash("know", ingest_msg(res, e))
                 st.rerun()
         with st.expander("B · Discover on the web", expanded=True):
             st.caption("Searches the web and Wikipedia for the active brand and lists candidate pages. You choose what gets ingested.")
@@ -426,7 +450,7 @@ elif page == "Sources":
                     else:
                         with st.spinner("Ingesting…"):
                             res, e = safe(svc.ingest_urls, user, brand_id, list(picked))
-                        flash("know", e or fmt_results(res))
+                        flash("know", ingest_msg(res, e))
                         ss.pop("cands", None)
                     st.rerun()
         with st.expander("C · Paste URLs"):
@@ -435,7 +459,7 @@ elif page == "Sources":
                 lst = [x for x in urls.replace(",", "\n").splitlines() if x.strip()]
                 with st.spinner("Ingesting…"):
                     res, e = safe(svc.ingest_urls, user, brand_id, lst)
-                flash("know", e or fmt_results(res))
+                flash("know", ingest_msg(res, e))
                 st.rerun()
         show_flash("know")
 

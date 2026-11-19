@@ -212,8 +212,8 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     assert svc.store("priya").get_brand(brands[0]["brand_id"])["kit"]["audience"] == "Everyone"
 
-    # evaluation lives on the account page
-    fake.session_state["nav"] = "Account"
+    # evaluation has its own (testing-only) page
+    fake.session_state["nav"] = "Evaluate"
     fake.clicks = {"Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"}
     run_script(fake, monkeypatch, svc)
     assert len(svc.list_brands("priya")) == 5
@@ -223,7 +223,8 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     res = fake.session_state["eval_result"]
     assert res.get("msg", "").startswith("✅ Finished: 8 of 8") and b"grounded" in res["csv"]
 
-    # log out clears the session
+    # log out clears the session (button lives on the Account page)
+    fake.session_state["nav"] = "Account"
     fake.clicks = {"Log out"}
     run_script(fake, monkeypatch, svc)
     assert "user" not in fake.session_state

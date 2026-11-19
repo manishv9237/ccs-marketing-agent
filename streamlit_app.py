@@ -319,7 +319,8 @@ labels = {b["brand_id"]: f"{b['name']} · {b['industry']}" for b in brands}
 if ss.get("sel_brand") not in ids:
     ss["sel_brand"] = ids[0] if ids else None
 
-PAGES = ["Add brand", "Brand kit", "Sources", "Brief", "Account"]
+SHOW_EVALUATE = True  # testing tool for the project team; set False (or delete the Evaluate page) before real users
+PAGES = ["Add brand", "Brand kit", "Sources", "Brief"] + (["Evaluate"] if SHOW_EVALUATE else []) + ["Account"]
 if "goto" in ss:
     ss["nav"] = ss.pop("goto")
 if ss.get("nav") not in PAGES:
@@ -327,12 +328,12 @@ if ss.get("nav") not in PAGES:
 full_name = ss.get("full") or ss.get("display") or user
 st.markdown('<div class="bca-logo">BrandVoice AI</div>', unsafe_allow_html=True)
 with st.container(key="topnav"):
-    _cols = st.columns([1.1, 1.1, 1, 0.8, 3.2, 2.4])
-    for _c, _p in zip(_cols[0:4], PAGES[:4]):
+    _cols = st.columns([1.1, 1.1, 1, 0.8, 0.95, 2.4, 2.4])
+    for _c, _p in zip(_cols[0:5], PAGES[:-1]):
         if _c.button(_p, key=f"nav_{_p}", type="primary" if ss["nav"] == _p else "secondary", use_container_width=True):
             ss["nav"] = _p
             st.rerun()
-    if _cols[5].button(full_name, key="nav_Account", type="primary" if ss["nav"] == "Account" else "secondary", use_container_width=True):
+    if _cols[6].button(full_name, key="nav_Account", type="primary" if ss["nav"] == "Account" else "secondary", use_container_width=True):
         ss["nav"] = "Account"
         st.rerun()
 page = ss["nav"]
@@ -638,6 +639,90 @@ elif page == "Brief":
                 hist.clear()
                 st.rerun()
 
+# ================================================================== EVALUATE (testing only: remove for real users)
+elif page == "Evaluate" and SHOW_EVALUATE:
+    st.markdown("## Evaluate")
+    st.info("Testing tool for the project team only. It follows the professor's guidelines and will be removed before real users get the app (set SHOW_EVALUATE = False near the top, or delete this page).")
+    _runs = ev.list_past_runs(svc, user)
+    _combos = {(r["params"].get("top_k"), r["params"].get("hybrid")) for r in _runs}
+    st.markdown("**Professor's guidelines: live checklist**")
+    _g, _j = ss.get("e_gen", s.default_model), ss.get("e_judge")
+    _allowed = ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna")
+    st.markdown(
+        f"- {'✅' if _g in _allowed else '⚠️'} Generator is one of the allowed models (`{_g}`); plain RAG, no agent loop\n"
+        f"- {'✅' if _j and _j != _g and _j in _allowed else '⚠️'} A *different* allowed model judges (`{_j or 'not chosen yet'}`)\n"
+        f"- ✅ Diverse brands (Swiggy, Marico, HDFC Bank, Infosys) × 4 platforms (LinkedIn, X, Instagram, Email) × 4 campaign goals\n"
+        f"- {'✅' if len(_runs) else '⚠️'} At least 30 test items per run (a full run is 32; subsets under 30 don't count)\n"
+        f"- {'✅' if len(_combos) >= 3 else '⚠️'} Retrieval parameters varied: **{len(_combos)}** different top-k / hybrid settings saved so far (aim for 4 to 5)")
+    st.divider()
+    st.markdown("Tests the agent on **4 brands from different sectors x 4 platforms x 4 goal types** (32 posts, each scored 1 to 5 by a *different* model as judge). "
+                "Step 1 loads the brands from their official websites and Wikipedia. Step 2 runs the test and gives a CSV. "
+                "**Don't click anything else while a step is running.**")
+    if st.button("Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"):
+        box = st.empty()
+        try:
+            for text in ev.setup_brands_stream(svc, user):
+                box.markdown(text)
+        except USER_ERRORS as exc:
+            box.markdown(err(exc))
+        except Exception:
+            logging.exception("eval setup failed")
+            box.markdown("⚠️ Something went wrong during setup. Please try again.")
+    c1, c2 = st.columns(2)
+    e_gen = c1.selectbox("Generator model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="e_gen")
+    judge_opts = list(s.allowed_models)
+    judge_default = next((m for m in ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna") if m in judge_opts and m != s.default_model), s.default_model)
+    e_judge = c2.selectbox("Judge model (must differ)", judge_opts, index=judge_opts.index(judge_default), key="e_judge")
+    d1, d2, d3 = st.columns(3)
+    e_n = d1.slider("Test items (32 = full run)", 4, ev.MAX_ITEMS, ev.MAX_ITEMS, 4)
+    e_topk = d2.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="e_topk")
+    e_hybrid = d3.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="e_hybrid")
+    if st.button("Step 2: Run evaluation", type="primary"):
+        params = {"gen_model": e_gen, "judge_model": e_judge, "top_k": int(e_topk), "hybrid": float(e_hybrid)}
+        bar = st.progress(0.0, text="Starting…")
+        rows, problem = [], None
+        try:
+            for done, total, rows in ev.evaluate_stream(svc, user, e_gen, e_judge, int(e_n), int(e_topk), float(e_hybrid)):
+                bar.progress(done / max(total, 1), text=f"Scored {done} of {total} items…")
+        except USER_ERRORS as exc:
+            problem = err(exc)
+        except Exception:
+            logging.exception("evaluation failed")
+            problem = "⚠️ Something went wrong during the evaluation. Please try again."
+        ok = [r for r in rows if not r["error"]]
+        if problem:
+            bar.empty()
+            ss["eval_result"] = {"problem": problem}
+        elif not ok:
+            bar.empty()
+            ss["eval_result"] = {"problem": "⚠️ No item could be scored. " + "; ".join(sorted({r["error"] for r in rows}))[:300]}
+        else:
+            bar.empty()
+            path = ev.write_csv(svc, user, rows, params)
+            ss["eval_result"] = {"msg": f"✅ Finished: {len(ok)} of {len(rows)} items scored.", "summary": ev.summary_markdown(rows, params),
+                                 "csv": Path(path).read_bytes(), "name": Path(path).name}
+        st.rerun()
+    res = ss.get("eval_result")
+    if res:
+        if res.get("problem"):
+            st.markdown(res["problem"])
+        else:
+            st.success(res["msg"])
+            st.markdown(res["summary"])
+            st.download_button("Download results (CSV)", res["csv"], file_name=res["name"], mime="text/csv")
+
+    st.divider()
+    with st.expander("Past runs (saved results)"):
+        runs = ev.list_past_runs(svc, user)
+        if not runs:
+            st.caption("No saved runs yet. Finished runs are saved automatically.")
+        else:
+            pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['name']} · top-k {r['params']['top_k']} · hybrid {r['params']['hybrid']} · {r['scored']} scored", key="past_run")
+            rows_p, params_p = ev.load_run(pick["path"])
+            st.markdown(ev.summary_markdown(rows_p, params_p))
+            st.download_button("Download this run (CSV)", Path(pick["path"]).read_bytes(), file_name=pick["name"], mime="text/csv", key="past_dl")
+
+
 # ================================================================== ACCOUNT
 else:
     st.markdown("## Your account")
@@ -676,73 +761,6 @@ else:
     if st.button("Log out"):
         ss.clear()
         st.rerun()
-    with st.expander("Evaluation (project testing tool)"):
-        st.markdown("Tests the agent on **4 brands from different sectors x 4 platforms x 4 goal types** (32 posts, each scored 1 to 5 by a *different* model as judge). "
-                    "Step 1 loads the brands from their official websites and Wikipedia. Step 2 runs the test and gives a CSV. "
-                    "**Don't click anything else while a step is running.**")
-        if st.button("Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"):
-            box = st.empty()
-            try:
-                for text in ev.setup_brands_stream(svc, user):
-                    box.markdown(text)
-            except USER_ERRORS as exc:
-                box.markdown(err(exc))
-            except Exception:
-                logging.exception("eval setup failed")
-                box.markdown("⚠️ Something went wrong during setup. Please try again.")
-        c1, c2 = st.columns(2)
-        e_gen = c1.selectbox("Generator model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="e_gen")
-        judge_opts = list(s.allowed_models)
-        judge_default = next((m for m in ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna") if m in judge_opts and m != s.default_model), s.default_model)
-        e_judge = c2.selectbox("Judge model (must differ)", judge_opts, index=judge_opts.index(judge_default), key="e_judge")
-        d1, d2, d3 = st.columns(3)
-        e_n = d1.slider("Test items (32 = full run)", 4, ev.MAX_ITEMS, ev.MAX_ITEMS, 4)
-        e_topk = d2.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="e_topk")
-        e_hybrid = d3.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="e_hybrid")
-        if st.button("Step 2: Run evaluation", type="primary"):
-            params = {"gen_model": e_gen, "judge_model": e_judge, "top_k": int(e_topk), "hybrid": float(e_hybrid)}
-            bar = st.progress(0.0, text="Starting…")
-            rows, problem = [], None
-            try:
-                for done, total, rows in ev.evaluate_stream(svc, user, e_gen, e_judge, int(e_n), int(e_topk), float(e_hybrid)):
-                    bar.progress(done / max(total, 1), text=f"Scored {done} of {total} items…")
-            except USER_ERRORS as exc:
-                problem = err(exc)
-            except Exception:
-                logging.exception("evaluation failed")
-                problem = "⚠️ Something went wrong during the evaluation. Please try again."
-            ok = [r for r in rows if not r["error"]]
-            if problem:
-                bar.empty()
-                ss["eval_result"] = {"problem": problem}
-            elif not ok:
-                bar.empty()
-                ss["eval_result"] = {"problem": "⚠️ No item could be scored. " + "; ".join(sorted({r["error"] for r in rows}))[:300]}
-            else:
-                bar.empty()
-                path = ev.write_csv(svc, user, rows, params)
-                ss["eval_result"] = {"msg": f"✅ Finished: {len(ok)} of {len(rows)} items scored.", "summary": ev.summary_markdown(rows, params),
-                                     "csv": Path(path).read_bytes(), "name": Path(path).name}
-            st.rerun()
-        res = ss.get("eval_result")
-        if res:
-            if res.get("problem"):
-                st.markdown(res["problem"])
-            else:
-                st.success(res["msg"])
-                st.markdown(res["summary"])
-                st.download_button("Download results (CSV)", res["csv"], file_name=res["name"], mime="text/csv")
-
-        st.divider()
-        with st.expander("Past runs (saved results)"):
-            runs = ev.list_past_runs(svc, user)
-            if not runs:
-                st.caption("No saved runs yet. Finished runs are saved automatically.")
-            else:
-                pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['name']} · top-k {r['params']['top_k']} · hybrid {r['params']['hybrid']} · {r['scored']} scored", key="past_run")
-                rows_p, params_p = ev.load_run(pick["path"])
-                st.markdown(ev.summary_markdown(rows_p, params_p))
-                st.download_button("Download this run (CSV)", Path(pick["path"]).read_bytes(), file_name=pick["name"], mime="text/csv", key="past_dl")
 
 
 if page != "Account":

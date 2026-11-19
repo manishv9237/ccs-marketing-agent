@@ -58,11 +58,15 @@ OPENAI_API_KEY = "your-key"
 APP_USERS = "manish:choose-a-password,professor:another-password"
 ```
 
-Free hosting wipes stored brands when the app restarts, so re-run the Evaluation tab's Step 1 after a restart.
+Free hosting wipes stored brands when the app restarts, so re-run the Evaluate page's Step 1 after a restart.
 
-## Evaluation tab
+## App layout (after login)
 
-Tab "4 · Evaluation" tests the agent on 4 brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 32 posts. Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
+Top bar: **Add brand** (brand kit form; saving moves to Sources), **Brand kit** (all brands, edit/delete), **Sources** (pick a brand, upload / discover / paste URLs), **Brief** (chat-style generation with channel, model, variations, top-k, hybrid and recipes), **Evaluate** (testing tool) and your name (edit name, change password, theme, log out).
+
+## Evaluate page (testing only; hide with SHOW_EVALUATE = False)
+
+The "Evaluate" tab in the top bar tests the agent on 4 brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 32 posts. Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
 
 ## Deploy publicly
 
@@ -124,7 +128,7 @@ Free hosts wipe the data folder on restart. To keep brands and evaluation result
 4. On Streamlit Cloud → Settings → Secrets add:
    `SUPABASE_URL = "https://xxxx.supabase.co"` and `SUPABASE_SERVICE_KEY = "..."` (the service key bypasses security rules: keep it only in Secrets, never in GitHub or chat).
 5. Reboot the app. Brands you create now survive restarts; they are restored when the user logs in. Without these two secrets the app behaves exactly as before.
-Embedding vectors are stored too, so restored brands work immediately. Past evaluation runs appear under Evaluation → "Past runs".
+Embedding vectors are stored too, so restored brands work immediately. Past evaluation runs appear under Evaluate → "Past runs".
 
 ## Sign up and log in (Streamlit app)
 The login page has two tabs: **Log in** (email or username + password) and **Sign up** (first name, last name, email, password). Accounts are stored as one JSON file each (salted scrypt hash, never the password) under `DATA_DIR/accounts/`, and copied to Supabase (`workspace_files`, owner `_accounts`) when `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` are set; without Supabase they vanish when a free host resets its disk. Accounts from `APP_USERS` still work (log in with the username). Set `SIGNUP_CODE` to require an invite code, `SIGNUP_ENABLED=0` to close sign-up, `SIGNUP_PER_DAY` to cap new accounts per day. Streamlit's toolbar actions (Share, star, edit, GitHub) are hidden with CSS and `toolbarMode = "viewer"`; the three-dot menu stays so people can pick light or dark mode; the owner-only "Manage app" button is added by Streamlit Cloud and cannot be removed from code.

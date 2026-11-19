@@ -179,6 +179,12 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     assert fake.session_state["gen_out"]["out"]["variations"][0]["content"].startswith("Solar powered")
     assert not fake.session_state.get("gen_err")
 
+    # save a reusable recipe from the brief settings
+    fake.values["Recipe name"] = "Solar kit"
+    fake.clicks = {"Save as recipe"}
+    run_script(fake, monkeypatch, svc)
+    assert "Solar kit" in svc.list_recipes("priya", brands[0]["brand_id"])
+
     # evaluation: setup then run a small balanced subset
     fake.clicks = {"Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"}
     run_script(fake, monkeypatch, svc)

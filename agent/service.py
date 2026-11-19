@@ -95,6 +95,52 @@ class Service:
     def list_documents(self, user: str, brand_id: str) -> list[dict]:
         return self.store(user).list_documents(brand_id)
 
+    def list_recipes(self, user: str, brand_id: str) -> dict:
+        return self.store(user).list_recipes(brand_id)
+
+    def save_recipe(self, user: str, brand_id: str, name: str, data: dict) -> None:
+        self.store(user).save_recipe(brand_id, name, data)
+
+    def delete_recipe(self, user: str, brand_id: str, name: str) -> None:
+        self.store(user).delete_recipe(brand_id, name)
+
+    def rewrite(self, user: str, brand_id: str, platform: str, variation: dict, instruction: str, sources: list[dict], model: str) -> dict:
+        """Guided rewrite of one draft: only the retrieved sources may supply facts; the result is fact-checked again."""
+        instruction = (instruction or "").strip()
+        if platform not in gen.PLATFORMS:
+            raise StoreError("Choose a platform.")
+        if len(instruction) < 3 or len(instruction) > 300:
+            raise StoreError("Describe the change in 3 to 300 characters, for example: shorter and friendlier.")
+        if model not in self.s.allowed_models:
+            raise StoreError("That model is not enabled on this server.")
+        self.store(user).get_brand(brand_id)  # ownership check
+        self.limiter.consume(user, "generate", self.s.gen_per_user_day, self.s.gen_global_day)
+        src = "\n\n".join(f"[S{i}] {s['text']}" for i, s in enumerate(sources, 1))
+        msgs = [{"role": "system", "content": "You are a senior marketing copywriter. Rewrite the POST exactly as the INSTRUCTION says. "
+                 "Use ONLY facts that appear in the SOURCES; never invent numbers, dates, names or claims. Keep the style suited to "
+                 f"{gen.PLATFORMS[platform]['label']}. Reply with JSON only: {{\"content\": \"...\"}}"},
+                {"role": "user", "content": f"SOURCES:\n{src}\n\nPOST:\n<<<\n{variation['content']}\n>>>\n\nINSTRUCTION: {instruction}"}]
+        try:
+            raw = self._llm(msgs, model, self.s, max_output_tokens=1500, json_mode=True)
+        except LLMError:
+            self.limiter.refund(user, "generate")
+            raise
+        parsed = gen._extract_json(raw) or {}
+        text = str(parsed.get("content", "")).strip()
+        if not text:
+            self.limiter.refund(user, "generate")
+            raise StoreError("The model did not return a rewrite. Please try again.")
+        new = dict(variation)
+        new["content"] = text
+        new["length"] = gen.check_length(platform, text)
+        new["unsupported"], new["verified"] = [], False
+        self._verify([new], sources, model)
+        return new
+
+    def goal_coverage(self, user: str, brand_id: str) -> list[dict]:
+        from . import coverage
+        return coverage.coverage(self.store(user).chunk_texts(brand_id))
+
     def delete_document(self, user: str, brand_id: str, doc_id: str) -> None:
         self.store(user).delete_document(brand_id, doc_id)
 

@@ -202,6 +202,37 @@ class WorkspaceStore:
             self._write_meta(d, meta)
             self._push(brand_id)
 
+    # ---------------------------------------------------------------- recipes
+    def list_recipes(self, brand_id: str) -> dict:
+        p = self._dir(brand_id) / "recipes.json"
+        with _LOCK:
+            return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+    def save_recipe(self, brand_id: str, name: str, data: dict) -> None:
+        name = (name or "").strip()[:40]
+        if len(name) < 2:
+            raise StoreError("Give the recipe a short name.")
+        d = self._dir(brand_id)
+        with _LOCK:
+            rec = self.list_recipes(brand_id)
+            if name not in rec and len(rec) >= 20:
+                raise StoreError("A brand can keep at most 20 recipes. Delete one first.")
+            rec[name] = data
+            _atomic_write(d / "recipes.json", lambda f: f.write(json.dumps(rec, indent=2).encode()))
+            self._push(brand_id)
+
+    def delete_recipe(self, brand_id: str, name: str) -> None:
+        d = self._dir(brand_id)
+        with _LOCK:
+            rec = self.list_recipes(brand_id)
+            rec.pop(name, None)
+            _atomic_write(d / "recipes.json", lambda f: f.write(json.dumps(rec, indent=2).encode()))
+            self._push(brand_id)
+
+    def chunk_texts(self, brand_id: str) -> list[str]:
+        with _LOCK:
+            return [c["text"] for c in self._read_chunks(self._dir(brand_id))]
+
     # -------------------------------------------------------------- retrieval
     def retrieve(self, brand_id: str, query: str, top_k: int, hybrid_weight: float, embedder: Embedder | None) -> list[dict]:
         """hybrid_weight: 1.0 = pure semantic, 0.0 = pure keyword (BM25)."""

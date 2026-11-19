@@ -53,7 +53,7 @@ ss = st.session_state
 # theme setting through the hidden menu. One flush-left line so Markdown never shows the CSS as text.
 _CSS = ("<style>"
         "[data-testid=\"stToolbarActions\"], [data-testid=\"stAppDeployButton\"], [data-testid=\"stDecoration\"], .stAppDeployButton, footer {display: none !important;} "
-        "[data-testid=\"stMainMenu\"] {visibility: hidden !important; position: absolute !important;} "
+        "[data-testid=\"stMainMenu\"] {display: none !important;} "
         "[data-baseweb=\"popover\"]:has([data-testid^=\"stMainMenuItem\"]) {opacity: 0 !important; pointer-events: none !important;} "
         ".block-container {padding-top: 3.6rem; max-width: 1080px;} "
         "h1, h2, h3 {letter-spacing: -0.01em;} "
@@ -79,32 +79,29 @@ _CSS = ("<style>"
         "</style>")
 st.markdown(_CSS, unsafe_allow_html=True)
 
-try:
-    from streamlit.components.v1 import html as _components_html  # noqa: E402
-except Exception:  # not available in the test stand-in
-    def _components_html(*a, **k):
-        return None
-
-_THEME_JS = """<script>(async () => {
-  const d = window.parent.document, sleep = t => new Promise(r => setTimeout(r, t));
-  const btn = d.querySelector('[data-testid="stMainMenuButton"]'); if (!btn) return;
-  btn.click();
-  for (let i = 0; i < 20; i++) {
-    const it = d.querySelector('[data-testid="stMainMenuItem-theme-__T__"]');
-    if (it) { it.click(); break; }
-    await sleep(100);
-  }
-  await sleep(250); btn.click();
-})();</script>"""
+_DARK = ("<style>:root {color-scheme: dark;} .stApp, [data-testid=\"stAppViewContainer\"], [data-testid=\"stHeader\"], [data-testid=\"stMain\"] {background-color: #0e1117 !important; color: #fafafa !important;} "
+         ".stApp p, .stApp span, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6, .stApp div[data-testid=\"stMarkdownContainer\"], .stApp div[data-testid=\"stCaptionContainer\"] {color: #fafafa !important;} "
+         ".stApp input, .stApp textarea, .stApp [data-baseweb=\"select\"] > div, .stApp [data-baseweb=\"input\"], .stApp [data-baseweb=\"textarea\"] {background-color: #262730 !important; color: #fafafa !important;} "
+         ".stApp [data-baseweb=\"popover\"] *, .stApp ul[role=\"listbox\"] {background-color: #262730 !important; color: #fafafa !important;} "
+         "div[data-testid=\"stForm\"], div[data-testid=\"stExpander\"], [data-testid=\"stChatMessage\"], .bca-strip, .bca-step {border-color: rgba(250,250,250,0.25) !important;} "
+         "[data-testid=\"stChatMessage\"] {background-color: #161a23 !important;} [data-testid=\"stBottom\"], [data-testid=\"stBottomBlockContainer\"] {background-color: #0e1117 !important;} "
+         "[data-testid=\"stAlert\"] {background-color: #1b2030 !important;} button[kind=\"secondary\"] {background-color: #262730 !important; color: #fafafa !important; border-color: rgba(250,250,250,0.25) !important;}</style>")
+_LIGHT = ("<style>:root {color-scheme: light;} .stApp, [data-testid=\"stAppViewContainer\"], [data-testid=\"stHeader\"], [data-testid=\"stMain\"] {background-color: #ffffff !important; color: #1f2328 !important;} "
+          ".stApp p, .stApp span, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6, .stApp div[data-testid=\"stMarkdownContainer\"], .stApp div[data-testid=\"stCaptionContainer\"] {color: #1f2328 !important;} "
+          ".stApp input, .stApp textarea, .stApp [data-baseweb=\"select\"] > div, .stApp [data-baseweb=\"input\"], .stApp [data-baseweb=\"textarea\"] {background-color: #f6f6f4 !important; color: #1f2328 !important;} "
+          ".stApp [data-baseweb=\"popover\"] *, .stApp ul[role=\"listbox\"] {background-color: #ffffff !important; color: #1f2328 !important;} "
+          "[data-testid=\"stBottom\"], [data-testid=\"stBottomBlockContainer\"] {background-color: #ffffff !important;}</style>")
 
 
 def theme_switcher() -> None:
-    """System / Light / Dark shown directly on the page (no three-dot menu)."""
+    """System / Light / Dark shown on the page. Applied with CSS here, so there is no popup and no dependence on Streamlit's own menu."""
     opts = ["System", "Light", "Dark"]
-    choice = st.radio("Theme", opts, index=opts.index(ss.get("theme_applied", "System")), horizontal=True, label_visibility="collapsed") or "System"
-    if ss.get("theme_applied", "System") != choice:
-        ss["theme_applied"] = choice
-        _components_html(_THEME_JS.replace("__T__", choice), height=0)
+    choice = st.radio("Theme", opts, index=opts.index(ss.get("theme_applied", "System")), horizontal=True, label_visibility="collapsed", key="theme_choice") or "System"
+    ss["theme_applied"] = choice
+    if choice == "Dark":
+        st.markdown(_DARK, unsafe_allow_html=True)
+    elif choice == "Light":
+        st.markdown(_LIGHT, unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------ login / sign up

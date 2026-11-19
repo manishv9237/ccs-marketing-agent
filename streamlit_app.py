@@ -79,7 +79,7 @@ _CSS = ("<style>"
         ".st-key-topnav button:hover {background: rgba(255,255,255,0.10); color: #ffffff;} "
         ".st-key-topnav button[kind=\"primary\"] {background: #5b4bdb;} "
         ".st-key-topnav button[kind=\"primary\"] p {color: #ffffff !important; font-weight: 600;} "
-        ".bca-logo {color: #ffffff; font-weight: 700; font-size: 1.1rem; padding-top: 0.45rem;} "
+        ".bca-logo {font-weight: 800; font-size: 2.1rem; line-height: 1.1; margin: -0.5rem 0 0.5rem 0; color: #5b4bdb; letter-spacing: -0.01em;} "
         ".st-key-topnav {background: #1c1a2e; border-radius: 12px; padding: 0.35rem 0.8rem; margin-bottom: 1.1rem;} "
         ".bca-swatch {display: inline-block; width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.4); margin-right: 6px; vertical-align: middle;} "
         "[data-testid=\"stChatMessage\"] {border: 1px solid rgba(128,128,128,0.25); border-radius: 16px; padding: 0.8rem 1rem; margin-bottom: 0.7rem;} "
@@ -308,14 +308,14 @@ if "goto" in ss:
 if ss.get("nav") not in PAGES:
     ss["nav"] = "Brief" if ids else "Add brand"
 full_name = ss.get("full") or ss.get("display") or user
+st.markdown('<div class="bca-logo">BrandVoice AI</div>', unsafe_allow_html=True)
 with st.container(key="topnav"):
-    _cols = st.columns([2.2, 1.1, 1, 1.1, 0.8, 2.2, 2.4])
-    _cols[0].markdown('<div class="bca-logo">BrandVoice AI</div>', unsafe_allow_html=True)
-    for _c, _p in zip(_cols[1:5], PAGES[:4]):
+    _cols = st.columns([1.1, 1, 1.1, 0.8, 3.2, 2.4])
+    for _c, _p in zip(_cols[0:4], PAGES[:4]):
         if _c.button(_p, key=f"nav_{_p}", type="primary" if ss["nav"] == _p else "secondary", use_container_width=True):
             ss["nav"] = _p
             st.rerun()
-    if _cols[6].button(full_name, key="nav_Account", type="primary" if ss["nav"] == "Account" else "secondary", use_container_width=True):
+    if _cols[5].button(full_name, key="nav_Account", type="primary" if ss["nav"] == "Account" else "secondary", use_container_width=True):
         ss["nav"] = "Account"
         st.rerun()
 page = ss["nav"]

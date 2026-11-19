@@ -74,6 +74,17 @@ _CSS = ("<style>"
         "div[data-testid=\"stTabs\"] button[role=\"tab\"] {font-weight: 600; padding: 0.6rem 1rem;} "
         ".stButton > button, .stDownloadButton > button, [data-testid=\"stFormSubmitButton\"] > button {border-radius: 10px; font-weight: 600;} "
         "textarea {border-radius: 10px !important;} "
+        ".st-key-topnav {background: #1c1a2e; border-radius: 12px; padding: 0.35rem 0.8rem; margin-bottom: 1.1rem;} "
+        ".st-key-topnav [data-testid=\"stRadio\"] > label {display: none;} "
+        ".st-key-topnav div[role=\"radiogroup\"] {display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem; width: 100%;} "
+        ".st-key-topnav div[role=\"radiogroup\"]::before {content: \"BrandVoice AI\"; font-weight: 700; color: #ffffff; margin-right: 1.2rem; letter-spacing: 0.01em;} "
+        ".st-key-topnav label[data-baseweb=\"radio\"] {margin: 0; padding: 0.3rem 0.8rem; border-radius: 8px; cursor: pointer;} "
+        ".st-key-topnav label[data-baseweb=\"radio\"] > div:first-child {display: none;} "
+        ".stApp .st-key-topnav label[data-baseweb=\"radio\"] p {color: #cfcbe8 !important; font-weight: 500; margin: 0;} "
+        ".st-key-topnav label[data-baseweb=\"radio\"]:has(input:checked) {background: #5b4bdb;} "
+        ".stApp .st-key-topnav label[data-baseweb=\"radio\"]:has(input:checked) p {color: #ffffff !important; font-weight: 600;} "
+        ".st-key-topnav div[role=\"radiogroup\"] > label:last-child {margin-left: auto;} "
+        ".bca-swatch {display: inline-block; width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(128,128,128,0.4); margin-right: 6px; vertical-align: middle;} "
         "[data-testid=\"stChatMessage\"] {border: 1px solid rgba(128,128,128,0.25); border-radius: 16px; padding: 0.8rem 1rem; margin-bottom: 0.7rem;} "
         "[data-testid=\"stChatInput\"] {border-radius: 16px;}"
         "</style>")
@@ -98,6 +109,11 @@ def theme_switcher() -> None:
     opts = ["System", "Light", "Dark"]
     choice = st.radio("Theme", opts, index=opts.index(ss.get("theme_applied", "System")), horizontal=True, label_visibility="collapsed", key="theme_choice") or "System"
     ss["theme_applied"] = choice
+    apply_theme()
+
+
+def apply_theme() -> None:
+    choice = ss.get("theme_applied", "System")
     if choice == "Dark":
         st.markdown(_DARK, unsafe_allow_html=True)
     elif choice == "Light":
@@ -105,9 +121,10 @@ def theme_switcher() -> None:
 
 
 # ------------------------------------------------------------------ login / sign up
-def _open_session(uid: str, display: str) -> None:
+def _open_session(uid: str, display: str, full: str = "") -> None:
     ss["user"] = uid
     ss["display"] = display
+    ss["full"] = full or display
     st.rerun()
 
 
@@ -133,7 +150,7 @@ def login_screen() -> None:
                     if "@" in ident:
                         acct = svc.accounts.verify(ident, pw)
                         if acct:
-                            _open_session(acct["id"], acct["name"])
+                            _open_session(acct["id"], acct["name"], acct.get("full_name", ""))
                     else:
                         uname = normalize_username(ident)
                         if uname and check_login(ident, pw, s):
@@ -161,7 +178,7 @@ def login_screen() -> None:
                         except (AccountError, LimitReached) as exc:
                             st.error(str(exc))
                         if acct:
-                            _open_session(acct["id"], acct["name"])
+                            _open_session(acct["id"], acct["name"], acct.get("full_name", ""))
     st.stop()
 
 
@@ -209,85 +226,167 @@ def safe(fn, *a, **kw):
         return None, "⚠️ Something went wrong. Please try again."
 
 
-# ----------------------------------------------------------------- header
-u = svc.usage(user)
-sem = {True: "semantic + keyword", False: "keyword-only (embedding model unavailable)", None: "loading embedding model…"}[u["semantic_search"]]
-_sp2, _th2 = st.columns([4, 2])
-with _th2:
-    theme_switcher()
-top = st.columns([5, 1])
-top[0].markdown('<p class="bca-kicker">Your AI partner for smarter, on-brand marketing</p><p class="bca-title">BrandVoice AI</p>'
-                '<p class="bca-sub">Grounded marketing copy for LinkedIn, X, Instagram and email, written from your brand\'s own documents and web sources, not from guesswork.</p>',
-                unsafe_allow_html=True)
-top[1].write(f"Signed in as **{ss.get('display', user)}**")
-if top[1].button("Log out"):
-    ss.clear()
-    st.rerun()
-st.markdown(f"Generations left today: **{u['generations_left']}** · retrieval: {sem}")
 
+# ------------------------------------------------------------------- chat
+_STATUS_ICON = {"grounded": "🟢", "flagged": "🔴", "unchecked": "⚪"}
+_RECIPE_KEYS = ("g_chan", "g_model", "g_n", "g_brief", "g_angles", "g_topk", "g_hyb")
+
+
+def _apply_recipe(data: dict) -> None:
+    for k in _RECIPE_KEYS:
+        if k in data:
+            ss[k] = data[k]
+
+
+def _do_rewrite(key: str, v: dict, out: dict, platform: str, brand_id_: str) -> None:
+    instr = ss.get(f"{key}_instr", "")
+    new, e = safe(svc.rewrite, user, brand_id_, platform, v, instr, out["sources"], out["model"])
+    if e:
+        ss[f"{key}_rw_err"] = e
+        return
+    new["history"] = list(v.get("history", [])) + [v["content"]]
+    v.clear()
+    v.update(new)
+    ss.pop(f"{key}_rw_err", None)
+
+
+def render_out(out: dict, platform: str, key: str, brand_id_: str) -> None:
+    st.caption(f"{PLATFORMS[platform]['label']} · model **{out['model']}** · retrieval {out['retrieval_ms']:.0f} ms · generation {out['generation_ms'] / 1000:.1f} s · "
+               f"{len(out['sources'])} sources · {'hybrid' if out['semantic'] else 'keyword-only'} search")
+    n_ok = sum(1 for v in out["variations"] if v.get("verified") and not v.get("unsupported"))
+    picked = 0
+    for v in out["variations"]:
+        vk = f"{key}_{v['number']}"
+        cites = ", ".join(f"S{x}" for x in v["sources"]) or "—"
+        st.markdown(f"**Variation {v['number']} · {v['angle']}**  \n_{v['length']} · sources: {cites}_")
+        if v["brand_note"]:
+            st.markdown(f"> {v['brand_note']}")
+        paras = review.paragraph_status(v["content"], v.get("unsupported", []), bool(v.get("verified")))
+        n_g = sum(1 for p in paras if p["status"] == "grounded")
+        if paras and any(p["status"] != "unchecked" for p in paras):
+            st.markdown(f"**Verification** · {n_g} of {len(paras)} paragraphs grounded")
+            for p in paras:
+                st.markdown(f"{_STATUS_ICON[p['status']]} {p['text']}")
+        if v.get("unsupported"):
+            st.warning("Not found in your sources (check before posting): " + "; ".join(v["unsupported"]))
+        elif v.get("verified"):
+            st.success("Fact-check: claims match the sources")
+        st.text_area(f"{PLATFORMS[platform]['label']} post {v['number']} (select and copy)", value=v["content"], height=180, key=f"{vk}_post")
+        with st.expander("Sources behind this piece"):
+            for i in v["sources"]:
+                if 1 <= i <= len(out["sources"]):
+                    sr = out["sources"][i - 1]
+                    st.markdown(f"**S{i}** · `{sr['source'][:80]}`\n> {sr['text'][:320].replace(chr(10), ' ')}{'…' if len(sr['text']) > 320 else ''}")
+        with st.expander("Guided rewrite"):
+            st.text_input("Describe the change (e.g. shorter and friendlier)", key=f"{vk}_instr", max_chars=300)
+            st.button("Rewrite", key=f"{vk}_rw", on_click=_do_rewrite, args=(vk, v, out, platform, brand_id_))
+            if ss.get(f"{vk}_rw_err"):
+                st.markdown(ss[f"{vk}_rw_err"])
+            if v.get("history"):
+                st.caption(f"History: {len(v['history'])} earlier version(s)")
+                for j, old in enumerate(v["history"], 1):
+                    st.text_area(f"Version {j}", value=old, height=100, key=f"{vk}_hist_{j}")
+        if st.checkbox("Pick this one", key=f"{vk}_pick"):
+            picked += 1
+    st.caption(f"{n_ok} of {len(out['variations'])} fully grounded · {picked} picked · review the flagged paragraphs before posting")
+    with st.expander("Sources used (check every claim against these)"):
+        for i, sr in enumerate(out["sources"], 1):
+            snippet = sr["text"][:320].replace("\n", " ")
+            st.markdown(f"**S{i}** · `{sr['source'][:80]}` · score {sr['score']}\n> {snippet}{'…' if len(sr['text']) > 320 else ''}")
+
+
+
+# ----------------------------------------------------------------- shell (top bar + pages)
+u = svc.usage(user)
+sem = {True: "semantic + keyword", False: "keyword-only", None: "loading embedding model…"}[u["semantic_search"]]
 brands = svc.list_brands(user)
 ids = [b["brand_id"] for b in brands]
-labels = {b["brand_id"]: f"{b['name']} · {b['industry']} ({b['docs']} docs)" for b in brands}
+labels = {b["brand_id"]: f"{b['name']} · {b['industry']}" for b in brands}
 if ss.get("sel_brand") not in ids:
     ss["sel_brand"] = ids[0] if ids else None
-brand_id = None
-if ids:
-    brand_id = st.selectbox("Active brand", ids, index=ids.index(ss["sel_brand"]), format_func=lambda i: labels[i])
-    ss["sel_brand"] = brand_id
-else:
-    pass
 
-_docs_now, _ = safe(svc.list_documents, user, brand_id) if brand_id else (None, None)
-_n_docs = len(_docs_now or [])
+PAGES = ["Add brand", "Sources", "Brand kit", "Brief", "Account"]
+if "goto" in ss:
+    ss["nav"] = ss.pop("goto")
+if ss.get("nav") not in PAGES:
+    ss["nav"] = "Brief" if ids else "Add brand"
+full_name = ss.get("full") or ss.get("display") or user
+with st.container(key="topnav"):
+    page = st.radio("Navigation", PAGES, horizontal=True, key="nav", label_visibility="collapsed",
+                    format_func=lambda p: full_name if p == "Account" else p) or PAGES[0]
 
-t_brand, t_know, t_gen, t_eval = st.tabs(["1 · Brand kit", "2 · Source library", "3 · New brief", "4 · Evaluation"])
 
-# ------------------------------------------------------------------ brand
-with t_brand:
+def brand_picker(label: str = "Brand") -> str | None:
+    """Dropdown of all created brands; remembers the choice across pages."""
+    if not ids:
+        st.info("No brands yet. Use **Add brand** first.")
+        return None
+    bid = st.selectbox(label, ids, index=ids.index(ss["sel_brand"]), format_func=lambda i: labels[i])
+    ss["sel_brand"] = bid
+    return bid
+
+
+_INDUSTRIES = list(INDUSTRY_CLUSTERS)
+_TONES = [("formal_casual", "Formal", "Casual"), ("reserved_bold", "Reserved", "Bold"), ("factual_emotive", "Factual", "Emotive")]
+
+
+def kit_fields(prefix: str, brand: dict | None = None):
+    """Brand kit inputs (inside a form). Returns (name, industry, kit dict)."""
+    kit = (brand or {}).get("kit") or {}
+    tone0 = kit.get("tone") or {}
+    cols0 = kit.get("colours") or []
+    c1, c2 = st.columns(2)
+    name = c1.text_input("Brand name", value=(brand or {}).get("name", ""), max_chars=80, placeholder="e.g. Marico", key=f"{prefix}_name")
+    cur_ind = (brand or {}).get("industry")
+    ind = c2.selectbox("Industry", _INDUSTRIES, index=(_INDUSTRIES.index(cur_ind) if cur_ind in _INDUSTRIES else None),
+                       placeholder="Choose the closest cluster", key=f"{prefix}_ind")
+    aud = st.text_input("Target audience", value=kit.get("audience", ""), max_chars=200, placeholder="e.g. Indian households, 25-45, value-conscious", key=f"{prefix}_aud")
+    pos = st.text_input("Positioning in one line", value=kit.get("positioning", ""), max_chars=200, placeholder="e.g. Everyday wellness brands families have trusted", key=f"{prefix}_pos")
+    st.markdown("**Tone**")
+    tone = {}
+    for key_, left, right in _TONES:
+        a, b_, c = st.columns([1, 5, 1])
+        a.markdown(f"<div style='text-align:right;padding-top:0.3rem'>{left}</div>", unsafe_allow_html=True)
+        tone[key_] = b_.slider(f"{left} to {right}", 0, 100, int(tone0.get(key_, 50)), label_visibility="collapsed", key=f"{prefix}_tone_{key_}")
+        c.markdown(f"<div style='padding-top:0.3rem'>{right}</div>", unsafe_allow_html=True)
+    st.markdown("**Brand colours**")
+    use_cols = st.checkbox("Include brand colours", value=bool(cols0), key=f"{prefix}_usecols")
+    defaults = (cols0 + ["#00843d", "#f4a900", "#1c1a17", "#5b4bdb"])[:4]
+    pickers = st.columns(4)
+    colours = [(pickers[i].color_picker(f"Colour {i + 1}", defaults[i], key=f"{prefix}_col{i}") or defaults[i]) for i in range(4)]
+    avoid = st.text_input("Words to avoid", value=kit.get("avoid", ""), max_chars=200, placeholder="comma separated, e.g. cheap, miracle, guaranteed", key=f"{prefix}_avoid")
+    notes = st.text_area("Brand voice & guidelines (optional)", value=kit.get("notes", ""), max_chars=8000, height=110, key=f"{prefix}_notes",
+                         placeholder="Tone of voice, words you always/never use, taglines…")
+    return name, ind, {"audience": aud, "positioning": pos, "tone": tone, "colours": colours if use_cols else [], "avoid": avoid, "notes": notes}
+
+
+# ================================================================== ADD BRAND
+if page == "Add brand":
+    st.markdown("## Add brand")
+    st.caption("Everything generated here is checked against this kit. Set it once; it governs every brief afterwards.")
+    show_flash("brand")
     with st.form("create_brand"):
-        c1, c2 = st.columns(2)
-        b_name = c1.text_input("Brand name", max_chars=80, placeholder="e.g. Acme Foods")
-        b_ind = c2.selectbox("Industry cluster", list(INDUSTRY_CLUSTERS), index=None, placeholder="Choose the closest cluster")
-        k1, k2 = st.columns(2)
-        b_aud = k1.text_input("Target audience", max_chars=200, placeholder="e.g. urban families, 25-40")
-        b_pos = k2.text_input("Positioning in one line", max_chars=200, placeholder="e.g. everyday health, made simple")
-        t1, t2, t3 = st.columns(3)
-        tone_a = t1.select_slider("Tone: register", ["Formal", "Balanced", "Casual"], value="Balanced")
-        tone_b = t2.select_slider("Tone: energy", ["Reserved", "Balanced", "Bold"], value="Balanced")
-        tone_c = t3.select_slider("Tone: feel", ["Factual", "Balanced", "Emotive"], value="Balanced")
-        use_cols = st.checkbox("Add brand colours")
-        c_a, c_b = st.columns(2)
-        col_a = c_a.color_picker("Primary colour", "#5b4bdb") if use_cols else ""
-        col_b = c_b.color_picker("Accent colour", "#f5a623") if use_cols else ""
-        b_avoid = st.text_input("Words to avoid", max_chars=200, placeholder="comma separated, e.g. cheap, guaranteed")
-        b_notes = st.text_area("Brand voice & guidelines (optional)", max_chars=8000, height=110,
-                               placeholder="Tone of voice, words you always/never use, audience, positioning, taglines…")
-        create = st.form_submit_button("Create brand", type="primary")
+        b_name, b_ind, b_kit = kit_fields("add")
+        create = st.form_submit_button("Save brand and continue", type="primary")
     with st.expander("What each industry cluster covers"):
         st.markdown("\n".join(f"- **{k}**: {v}" for k, v in INDUSTRY_CLUSTERS.items()))
     if create:
         if not b_ind:
-            flash("brand", err(StoreError("Choose an industry cluster.")))
+            flash("brand", err(StoreError("Choose an industry.")))
         else:
-            _kit = [f"Target audience: {b_aud}" if b_aud else "", f"Positioning: {b_pos}" if b_pos else "",
-                    "Tone: " + ", ".join(x for x in (tone_a, tone_b, tone_c) if x and x != "Balanced") if any(x and x != "Balanced" for x in (tone_a, tone_b, tone_c)) else "",
-                    f"Brand colours: {col_a}, {col_b}" if (use_cols and col_a) else "",
-                    f"Words to avoid: {b_avoid}" if b_avoid else "", b_notes or ""]
-            b, e = safe(svc.create_brand, user, b_name, b_ind, "\n".join(x for x in _kit if x))
+            b, e = safe(svc.create_brand, user, b_name, b_ind, "", b_kit)
             if e:
                 flash("brand", e)
             else:
                 ss["sel_brand"] = b["brand_id"]
-                flash("brand", f"✅ Created **{b['name']}**. Next: add knowledge in the Knowledge tab.")
+                flash("know", f"✅ Saved **{b['name']}**. Now add its sources.")
+                ss["goto"] = "Sources"
         st.rerun()
-    if brand_id and st.button("Delete active brand"):
-        _, e = safe(svc.delete_brand, user, brand_id)
-        flash("brand", e or "🗑️ Brand deleted.")
-        st.rerun()
-    show_flash("brand")
 
-# -------------------------------------------------------------- knowledge
-with t_know:
+# ================================================================== SOURCES
+elif page == "Sources":
+    st.markdown("## Sources")
+    brand_id = brand_picker("Brand")
     st.markdown("The more real brand material here, the better and more specific the content. **Don't upload confidential documents**: this is a shared public demo.")
     if not brand_id:
         st.info("Create or select a brand first.")
@@ -372,225 +471,259 @@ with t_know:
                 flash("know", e or "🗑️ Removed.")
                 st.rerun()
 
-# ------------------------------------------------------------------- chat
-_STATUS_ICON = {"grounded": "🟢", "flagged": "🔴", "unchecked": "⚪"}
-_RECIPE_KEYS = ("g_chan", "g_model", "g_n", "g_brief", "g_angles", "g_topk", "g_hyb")
 
+# ================================================================== BRAND KIT
+elif page == "Brand kit":
+    st.markdown("## Brand kit")
+    st.caption("All your brands. Edit any of them here; changes apply to the next brief.")
+    show_flash("kit")
+    if not brands:
+        st.info("No brands yet. Use **Add brand** first.")
+    for b in brands:
+        bid = b["brand_id"]
+        kit = b.get("kit") or {}
+        full_b = svc.store(user).get_brand(bid)
+        kit = full_b.get("kit") or {}
+        with st.container(border=True):
+            h1, h2, h3 = st.columns([5, 1, 1])
+            h1.markdown(f"**{b['name']}** · {b['industry']} · {b['docs']} sources")
+            if h2.button("Edit", key=f"edit_{bid}"):
+                ss["edit_brand"] = None if ss.get("edit_brand") == bid else bid
+                ss.pop("confirm_del", None)
+                st.rerun()
+            if h3.button("Delete", key=f"del_{bid}"):
+                ss["confirm_del"] = bid
+                ss.pop("edit_brand", None)
+                st.rerun()
+            if kit.get("audience"):
+                st.markdown(f"**Audience:** {kit['audience']}")
+            if kit.get("positioning"):
+                st.markdown(f"**Positioning:** {kit['positioning']}")
+            if kit.get("tone"):
+                t_ = kit["tone"]
+                st.caption(" · ".join(f"{l}–{r}: {t_.get(k, 50)}" for k, l, r in _TONES))
+            if kit.get("colours"):
+                st.markdown("".join(f'<span class="bca-swatch" style="background:{c}"></span>' for c in kit["colours"]), unsafe_allow_html=True)
+            if kit.get("avoid"):
+                st.markdown(f"**Words to avoid:** {kit['avoid']}")
+            if ss.get("confirm_del") == bid:
+                st.warning(f"Delete {b['name']} and all its sources? This cannot be undone.")
+                y, n_ = st.columns([1, 1])
+                if y.button("Yes, delete", key=f"yes_{bid}", type="primary"):
+                    _, e = safe(svc.delete_brand, user, bid)
+                    ss.pop("confirm_del", None)
+                    flash("kit", e or f"🗑️ Deleted {b['name']}.")
+                    st.rerun()
+                if n_.button("Cancel", key=f"no_{bid}"):
+                    ss.pop("confirm_del", None)
+                    st.rerun()
+            if ss.get("edit_brand") == bid:
+                with st.form(f"edit_form_{bid}"):
+                    e_name, e_ind, e_kit = kit_fields(f"ed_{bid}", full_b)
+                    save = st.form_submit_button("Save changes", type="primary")
+                if save:
+                    _, e = safe(svc.update_brand, user, bid, e_name, e_ind or b["industry"], e_kit)
+                    if not e:
+                        ss.pop("edit_brand", None)
+                    flash("kit", e or f"✅ Updated {e_name.strip()}.")
+                    st.rerun()
 
-def _apply_recipe(data: dict) -> None:
-    for k in _RECIPE_KEYS:
-        if k in data:
-            ss[k] = data[k]
-
-
-def _do_rewrite(key: str, v: dict, out: dict, platform: str, brand_id_: str) -> None:
-    instr = ss.get(f"{key}_instr", "")
-    new, e = safe(svc.rewrite, user, brand_id_, platform, v, instr, out["sources"], out["model"])
-    if e:
-        ss[f"{key}_rw_err"] = e
-        return
-    new["history"] = list(v.get("history", [])) + [v["content"]]
-    v.clear()
-    v.update(new)
-    ss.pop(f"{key}_rw_err", None)
-
-
-def render_out(out: dict, platform: str, key: str, brand_id_: str) -> None:
-    st.caption(f"{PLATFORMS[platform]['label']} · model **{out['model']}** · retrieval {out['retrieval_ms']:.0f} ms · generation {out['generation_ms'] / 1000:.1f} s · "
-               f"{len(out['sources'])} sources · {'hybrid' if out['semantic'] else 'keyword-only'} search")
-    n_ok = sum(1 for v in out["variations"] if v.get("verified") and not v.get("unsupported"))
-    picked = 0
-    for v in out["variations"]:
-        vk = f"{key}_{v['number']}"
-        cites = ", ".join(f"S{x}" for x in v["sources"]) or "—"
-        st.markdown(f"**Variation {v['number']} · {v['angle']}**  \n_{v['length']} · sources: {cites}_")
-        if v["brand_note"]:
-            st.markdown(f"> {v['brand_note']}")
-        paras = review.paragraph_status(v["content"], v.get("unsupported", []), bool(v.get("verified")))
-        n_g = sum(1 for p in paras if p["status"] == "grounded")
-        if paras and any(p["status"] != "unchecked" for p in paras):
-            st.markdown(f"**Verification** · {n_g} of {len(paras)} paragraphs grounded")
-            for p in paras:
-                st.markdown(f"{_STATUS_ICON[p['status']]} {p['text']}")
-        if v.get("unsupported"):
-            st.warning("Not found in your sources (check before posting): " + "; ".join(v["unsupported"]))
-        elif v.get("verified"):
-            st.success("Fact-check: claims match the sources")
-        st.text_area(f"{PLATFORMS[platform]['label']} post {v['number']} (select and copy)", value=v["content"], height=180, key=f"{vk}_post")
-        with st.expander("Sources behind this piece"):
-            for i in v["sources"]:
-                if 1 <= i <= len(out["sources"]):
-                    sr = out["sources"][i - 1]
-                    st.markdown(f"**S{i}** · `{sr['source'][:80]}`\n> {sr['text'][:320].replace(chr(10), ' ')}{'…' if len(sr['text']) > 320 else ''}")
-        with st.expander("Guided rewrite"):
-            st.text_input("Describe the change (e.g. shorter and friendlier)", key=f"{vk}_instr", max_chars=300)
-            st.button("Rewrite", key=f"{vk}_rw", on_click=_do_rewrite, args=(vk, v, out, platform, brand_id_))
-            if ss.get(f"{vk}_rw_err"):
-                st.markdown(ss[f"{vk}_rw_err"])
-            if v.get("history"):
-                st.caption(f"History: {len(v['history'])} earlier version(s)")
-                for j, old in enumerate(v["history"], 1):
-                    st.text_area(f"Version {j}", value=old, height=100, key=f"{vk}_hist_{j}")
-        if st.checkbox("Pick this one", key=f"{vk}_pick"):
-            picked += 1
-    st.caption(f"{n_ok} of {len(out['variations'])} fully grounded · {picked} picked · review the flagged paragraphs before posting")
-    with st.expander("Sources used (check every claim against these)"):
-        for i, sr in enumerate(out["sources"], 1):
-            snippet = sr["text"][:320].replace("\n", " ")
-            st.markdown(f"**S{i}** · `{sr['source'][:80]}` · score {sr['score']}\n> {snippet}{'…' if len(sr['text']) > 320 else ''}")
-
-
-with t_gen:
-    with st.chat_message("assistant"):
-        if not brand_id:
-            st.markdown("Hi, I'm **BrandVoice AI**. Let's start by creating your brand in the **1 · Brand kit** tab, then I'll help you write on-brand posts.")
-        elif not _n_docs:
-            st.markdown("Brand is ready. Next, add some sources in the **2 · Source library** tab (documents, web pages or URLs) so I can ground every claim.")
-        else:
-            st.markdown("Hi, I'm **BrandVoice AI**. Choose your channels below, then tell me the campaign goal in the box at the bottom, for example: "
-                        "*Drive sign-ups for the summer launch*. I'll write variations for each channel from your sources and fact-check them.")
-    if brand_id:
-        recipes, _re = safe(svc.list_recipes, user, brand_id)
-        recipes = recipes or {}
-        _plat_keys = list(PLATFORMS)
-        with st.expander("Brief settings", expanded=True):
-            st.markdown(f"**New brief** · {next((b['name'] for b in brands if b['brand_id'] == brand_id), '')} · draft")
+# ================================================================== BRIEF
+elif page == "Brief":
+    _brand_name = next((b["name"] for b in brands if b["brand_id"] == ss.get("sel_brand")), "")
+    st.markdown(f"## New brief" + (f" · {_brand_name}" if _brand_name else "") + " · draft")
+    desk, chat = st.columns([1, 2])
+    with desk:
+        brand_id = brand_picker("Brand")
+        _docs_now, _ = safe(svc.list_documents, user, brand_id) if brand_id else (None, None)
+        _n_docs = len(_docs_now or [])
+        st.caption(f"{_n_docs} sources · Today's quota: {u['generations_left']} left · retrieval: {sem}")
+        if brand_id:
+            recipes, _re = safe(svc.list_recipes, user, brand_id)
+            recipes = recipes or {}
+            _plat_keys = list(PLATFORMS)
             chans = st.multiselect("Channels", _plat_keys, default=_plat_keys[:1], format_func=lambda k: PLATFORMS[k]["label"], key="g_chan")
-            c2, c3 = st.columns(2)
-            model = c2.selectbox("Model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="g_model")
-            n = c3.slider("Variations per channel", 1, 5, 2, key="g_n")
-            st.caption("Each variation takes a different angle, so three gives you a benefit-led, a story-led and a problem/solution version to choose between.")
-            angles = st.text_input("Angles to use (optional)", max_chars=200, placeholder="e.g. festive gifting, family story, price value", key="g_angles")
+            model = st.selectbox("Model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="g_model")
+            n = st.slider("Variations per channel", 1, 5, 2, key="g_n")
+            st.caption("Each variation takes a different angle, so three gives a benefit-led, a story-led and a problem/solution version.")
+            angles = st.text_input("Angles to use (optional)", max_chars=200, placeholder="e.g. festive gifting, family story", key="g_angles")
             brief = st.text_area("Brief / context (optional)", max_chars=2000, height=90, placeholder="Key message, offer, audience, dates, things to mention or avoid…", key="g_brief")
             g_topk = st.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="g_topk")
             g_hybrid = st.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="g_hyb")
             _pieces = max(1, len(chans or [1])) * int(n)
             st.markdown('<div class="bca-strip">'
-                        f'<div>This run<b>{_pieces} pieces</b>{len(chans or [1])} channels × {int(n)} variations</div>'
-                        f'<div>Est. time<b>~{max(1, len(chans or [1]))} to {2 * max(1, len(chans or [1]))} min</b></div>'
-                        f'<div>Today\'s quota<b>{u["generations_left"]} left</b>one per channel</div>'
-                        f'<div>Retrieval<b>top-k {int(g_topk)}</b></div><div>Model<b>{model}</b></div></div>', unsafe_allow_html=True)
-            st.markdown("**Reusable** · save this brief as a recipe and re-run it later without rewriting it.")
-            r1, r2 = st.columns([3, 1])
-            rname = r1.text_input("Recipe name", max_chars=40, placeholder="e.g. Festive launch kit")
-            if r2.button("Save as recipe"):
+                        f'<div>This run<b>{_pieces} pieces</b>{len(chans or [1])} × {int(n)}</div>'
+                        f'<div>Est. time<b>~{max(1, len(chans or [1]))} to {2 * max(1, len(chans or [1]))} min</b></div></div>', unsafe_allow_html=True)
+            st.markdown("**Reusable** · save this brief as a recipe.")
+            rname = st.text_input("Recipe name", max_chars=40, placeholder="e.g. Festive launch kit")
+            if st.button("Save as recipe"):
                 _, e = safe(svc.save_recipe, user, brand_id, rname, {"g_chan": list(chans or []), "g_model": model, "g_n": int(n), "g_brief": brief,
                                                                       "g_angles": angles, "g_topk": int(g_topk), "g_hyb": float(g_hybrid)})
                 flash("recipe", e or f"✅ Saved recipe **{rname.strip()[:40]}**.")
                 st.rerun()
             if recipes:
-                p1, p2, p3 = st.columns([3, 1, 1])
-                pick_r = p1.selectbox("Saved recipes", list(recipes), index=None, placeholder="Pick a recipe")
+                pick_r = st.selectbox("Saved recipes", list(recipes), index=None, placeholder="Pick a recipe")
+                p2, p3 = st.columns(2)
                 p2.button("Load recipe", on_click=lambda: _apply_recipe(recipes.get(pick_r, {})) if pick_r else None)
                 if p3.button("Delete recipe") and pick_r:
                     _, e = safe(svc.delete_recipe, user, brand_id, pick_r)
                     flash("recipe", e or "🗑️ Recipe deleted.")
                     st.rerun()
             show_flash("recipe")
-        hist = ss.setdefault("chat", {}).setdefault(brand_id, [])
-        for i, m in enumerate(hist):
-            with st.chat_message(m["role"]):
-                if m["role"] == "user":
-                    st.markdown(m["text"])
-                elif m.get("error"):
-                    st.markdown(m["error"])
-                else:
-                    render_out(m["out"], m["platform"], f"h{i}", brand_id)
-        prompt = st.chat_input("Describe your campaign goal, e.g. Drive sign-ups for the summer launch")
-        if prompt:
-            hist.append({"role": "user", "text": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            targets = list(chans or _plat_keys[:1])
-            full_brief = (brief or "") + (f"\nAngles to use: {angles}" if angles else "")
-            last_out, last_e = None, None
-            with st.chat_message("assistant"):
-                bar = st.progress(0.0, text="Starting…")
-                for k, ch in enumerate(targets):
-                    bar.progress(k / len(targets), text=f"Writing {PLATFORMS[ch]['label']} ({k + 1} of {len(targets)}), then fact-checking…")
-                    out, e = safe(svc.generate, user, brand_id, ch, prompt, full_brief, int(n), model, int(g_topk), float(g_hybrid))
-                    if out:
-                        hist.append({"role": "assistant", "out": out, "platform": ch})
-                        last_out = {"out": out, "platform": ch}
+    with chat:
+        with st.chat_message("assistant"):
+            if not brand_id:
+                st.markdown("Hi, I'm **BrandVoice AI**. Start with **Add brand**, then add its **Sources**, and I'll help you write on-brand posts here.")
+            elif not _n_docs:
+                st.markdown("Brand is ready. Add some **Sources** (documents, web pages or URLs) so I can ground every claim.")
+            else:
+                st.markdown("Hi, I'm **BrandVoice AI**. Choose your channels on the left, then tell me the campaign goal below, for example: "
+                            "*Drive sign-ups for the summer launch*. I'll write variations for each channel from your sources and fact-check them.")
+        if brand_id:
+            hist = ss.setdefault("chat", {}).setdefault(brand_id, [])
+            for i, m in enumerate(hist):
+                with st.chat_message(m["role"]):
+                    if m["role"] == "user":
+                        st.markdown(m["text"])
+                    elif m.get("error"):
+                        st.markdown(m["error"])
                     else:
-                        hist.append({"role": "assistant", "error": e or "⚠️ Nothing was generated."})
-                        last_e = e
-                        break
-                bar.empty()
-            ss["gen_out"] = last_out
-            ss["gen_err"] = last_e
-            st.rerun()
-        if hist and st.button("New chat"):
-            hist.clear()
-            st.rerun()
+                        render_out(m["out"], m["platform"], f"h{i}", brand_id)
+            prompt = st.chat_input("Describe your campaign goal, e.g. Drive sign-ups for the summer launch")
+            if prompt:
+                hist.append({"role": "user", "text": prompt})
+                with st.chat_message("user"):
+                    st.markdown(prompt)
+                targets = list(chans or _plat_keys[:1])
+                full_brief = (brief or "") + (f"\nAngles to use: {angles}" if angles else "")
+                last_out, last_e = None, None
+                with st.chat_message("assistant"):
+                    bar = st.progress(0.0, text="Starting…")
+                    for k, ch in enumerate(targets):
+                        bar.progress(k / len(targets), text=f"Writing {PLATFORMS[ch]['label']} ({k + 1} of {len(targets)}), then fact-checking…")
+                        out, e = safe(svc.generate, user, brand_id, ch, prompt, full_brief, int(n), model, int(g_topk), float(g_hybrid))
+                        if out:
+                            hist.append({"role": "assistant", "out": out, "platform": ch})
+                            last_out = {"out": out, "platform": ch}
+                        else:
+                            hist.append({"role": "assistant", "error": e or "⚠️ Nothing was generated."})
+                            last_e = e
+                            break
+                    bar.empty()
+                ss["gen_out"] = last_out
+                ss["gen_err"] = last_e
+                st.rerun()
+            if hist and st.button("New chat"):
+                hist.clear()
+                st.rerun()
 
-# ------------------------------------------------------------- evaluation
-with t_eval:
-    st.markdown("Tests the agent on **4 brands from different sectors x 4 platforms x 4 goal types** (32 posts, each scored 1 to 5 by a *different* model as judge). "
-                "Step 1 loads the brands from their official websites and Wikipedia. Step 2 runs the test and gives a CSV. "
-                "**Don't click anything else while a step is running.**")
-    if st.button("Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"):
-        box = st.empty()
-        try:
-            for text in ev.setup_brands_stream(svc, user):
-                box.markdown(text)
-        except USER_ERRORS as exc:
-            box.markdown(err(exc))
-        except Exception:
-            logging.exception("eval setup failed")
-            box.markdown("⚠️ Something went wrong during setup. Please try again.")
-    c1, c2 = st.columns(2)
-    e_gen = c1.selectbox("Generator model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="e_gen")
-    judge_opts = list(s.allowed_models)
-    judge_default = next((m for m in ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna") if m in judge_opts and m != s.default_model), s.default_model)
-    e_judge = c2.selectbox("Judge model (must differ)", judge_opts, index=judge_opts.index(judge_default), key="e_judge")
-    d1, d2, d3 = st.columns(3)
-    e_n = d1.slider("Test items (32 = full run)", 4, ev.MAX_ITEMS, ev.MAX_ITEMS, 4)
-    e_topk = d2.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="e_topk")
-    e_hybrid = d3.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="e_hybrid")
-    if st.button("Step 2: Run evaluation", type="primary"):
-        params = {"gen_model": e_gen, "judge_model": e_judge, "top_k": int(e_topk), "hybrid": float(e_hybrid)}
-        bar = st.progress(0.0, text="Starting…")
-        rows, problem = [], None
-        try:
-            for done, total, rows in ev.evaluate_stream(svc, user, e_gen, e_judge, int(e_n), int(e_topk), float(e_hybrid)):
-                bar.progress(done / max(total, 1), text=f"Scored {done} of {total} items…")
-        except USER_ERRORS as exc:
-            problem = err(exc)
-        except Exception:
-            logging.exception("evaluation failed")
-            problem = "⚠️ Something went wrong during the evaluation. Please try again."
-        ok = [r for r in rows if not r["error"]]
-        if problem:
-            bar.empty()
-            ss["eval_result"] = {"problem": problem}
-        elif not ok:
-            bar.empty()
-            ss["eval_result"] = {"problem": "⚠️ No item could be scored. " + "; ".join(sorted({r["error"] for r in rows}))[:300]}
-        else:
-            bar.empty()
-            path = ev.write_csv(svc, user, rows, params)
-            ss["eval_result"] = {"msg": f"✅ Finished: {len(ok)} of {len(rows)} items scored.", "summary": ev.summary_markdown(rows, params),
-                                 "csv": Path(path).read_bytes(), "name": Path(path).name}
+# ================================================================== ACCOUNT
+else:
+    st.markdown("## Your account")
+    show_flash("acct")
+    acct = svc.accounts.get(user)
+    if acct:
+        with st.form("profile"):
+            p1, p2 = st.columns(2)
+            f_first = p1.text_input("First name", value=acct["first_name"], max_chars=40, key="pf_first")
+            f_last = p2.text_input("Last name", value=acct["last_name"], max_chars=40, key="pf_last")
+            st.text_input("Email", value=acct["email"], disabled=True, key="pf_email")
+            if st.form_submit_button("Save details", type="primary"):
+                try:
+                    r = svc.accounts.update_profile(user, f_first, f_last)
+                    ss["display"], ss["full"] = r["name"], r["full_name"]
+                    flash("acct", "✅ Details saved.")
+                except AccountError as exc:
+                    flash("acct", err(exc))
+                st.rerun()
+        with st.form("password"):
+            st.markdown("**Change password**")
+            old_pw = st.text_input("Current password", type="password", key="pw_old")
+            new_pw = st.text_input("New password (at least 8 characters)", type="password", key="pw_new")
+            new_pw2 = st.text_input("Confirm new password", type="password", key="pw_new2")
+            if st.form_submit_button("Change password"):
+                try:
+                    svc.accounts.change_password(user, old_pw, new_pw, new_pw2)
+                    flash("acct", "✅ Password changed.")
+                except AccountError as exc:
+                    flash("acct", err(exc))
+                st.rerun()
+    else:
+        st.info("This login is managed by the project team, so its name and password can't be edited here.")
+    st.markdown("**Appearance**")
+    theme_switcher()
+    if st.button("Log out"):
+        ss.clear()
         st.rerun()
-    res = ss.get("eval_result")
-    if res:
-        if res.get("problem"):
-            st.markdown(res["problem"])
-        else:
-            st.success(res["msg"])
-            st.markdown(res["summary"])
-            st.download_button("Download results (CSV)", res["csv"], file_name=res["name"], mime="text/csv")
+    with st.expander("Evaluation (project testing tool)"):
+        st.markdown("Tests the agent on **4 brands from different sectors x 4 platforms x 4 goal types** (32 posts, each scored 1 to 5 by a *different* model as judge). "
+                    "Step 1 loads the brands from their official websites and Wikipedia. Step 2 runs the test and gives a CSV. "
+                    "**Don't click anything else while a step is running.**")
+        if st.button("Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"):
+            box = st.empty()
+            try:
+                for text in ev.setup_brands_stream(svc, user):
+                    box.markdown(text)
+            except USER_ERRORS as exc:
+                box.markdown(err(exc))
+            except Exception:
+                logging.exception("eval setup failed")
+                box.markdown("⚠️ Something went wrong during setup. Please try again.")
+        c1, c2 = st.columns(2)
+        e_gen = c1.selectbox("Generator model", list(s.allowed_models), index=list(s.allowed_models).index(s.default_model), key="e_gen")
+        judge_opts = list(s.allowed_models)
+        judge_default = next((m for m in ("gpt-5.4-nano", "gpt-5-nano", "gpt-6-luna", "gpt-5.6-luna") if m in judge_opts and m != s.default_model), s.default_model)
+        e_judge = c2.selectbox("Judge model (must differ)", judge_opts, index=judge_opts.index(judge_default), key="e_judge")
+        d1, d2, d3 = st.columns(3)
+        e_n = d1.slider("Test items (32 = full run)", 4, ev.MAX_ITEMS, ev.MAX_ITEMS, 4)
+        e_topk = d2.slider("Sources to retrieve (top-k)", 2, 12, s.default_top_k, key="e_topk")
+        e_hybrid = d3.slider("Hybrid weight (1 = semantic only, 0 = keyword only)", 0.0, 1.0, float(s.default_hybrid), 0.1, key="e_hybrid")
+        if st.button("Step 2: Run evaluation", type="primary"):
+            params = {"gen_model": e_gen, "judge_model": e_judge, "top_k": int(e_topk), "hybrid": float(e_hybrid)}
+            bar = st.progress(0.0, text="Starting…")
+            rows, problem = [], None
+            try:
+                for done, total, rows in ev.evaluate_stream(svc, user, e_gen, e_judge, int(e_n), int(e_topk), float(e_hybrid)):
+                    bar.progress(done / max(total, 1), text=f"Scored {done} of {total} items…")
+            except USER_ERRORS as exc:
+                problem = err(exc)
+            except Exception:
+                logging.exception("evaluation failed")
+                problem = "⚠️ Something went wrong during the evaluation. Please try again."
+            ok = [r for r in rows if not r["error"]]
+            if problem:
+                bar.empty()
+                ss["eval_result"] = {"problem": problem}
+            elif not ok:
+                bar.empty()
+                ss["eval_result"] = {"problem": "⚠️ No item could be scored. " + "; ".join(sorted({r["error"] for r in rows}))[:300]}
+            else:
+                bar.empty()
+                path = ev.write_csv(svc, user, rows, params)
+                ss["eval_result"] = {"msg": f"✅ Finished: {len(ok)} of {len(rows)} items scored.", "summary": ev.summary_markdown(rows, params),
+                                     "csv": Path(path).read_bytes(), "name": Path(path).name}
+            st.rerun()
+        res = ss.get("eval_result")
+        if res:
+            if res.get("problem"):
+                st.markdown(res["problem"])
+            else:
+                st.success(res["msg"])
+                st.markdown(res["summary"])
+                st.download_button("Download results (CSV)", res["csv"], file_name=res["name"], mime="text/csv")
 
-    st.divider()
-    with st.expander("Past runs (saved results)"):
-        runs = ev.list_past_runs(svc, user)
-        if not runs:
-            st.caption("No saved runs yet. Finished runs are saved automatically.")
-        else:
-            pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['name']} · top-k {r['params']['top_k']} · hybrid {r['params']['hybrid']} · {r['scored']} scored", key="past_run")
-            rows_p, params_p = ev.load_run(pick["path"])
-            st.markdown(ev.summary_markdown(rows_p, params_p))
-            st.download_button("Download this run (CSV)", Path(pick["path"]).read_bytes(), file_name=pick["name"], mime="text/csv", key="past_dl")
+        st.divider()
+        with st.expander("Past runs (saved results)"):
+            runs = ev.list_past_runs(svc, user)
+            if not runs:
+                st.caption("No saved runs yet. Finished runs are saved automatically.")
+            else:
+                pick = st.selectbox("Run", runs, format_func=lambda r: f"{r['name']} · top-k {r['params']['top_k']} · hybrid {r['params']['hybrid']} · {r['scored']} scored", key="past_run")
+                rows_p, params_p = ev.load_run(pick["path"])
+                st.markdown(ev.summary_markdown(rows_p, params_p))
+                st.download_button("Download this run (CSV)", Path(pick["path"]).read_bytes(), file_name=pick["name"], mime="text/csv", key="past_dl")
 
+
+if page != "Account":
+    apply_theme()
 st.caption("Demo build. Generated copy is a draft: verify facts against the sources before publishing. Content you add is stored on the server and may be visible to the operators.")

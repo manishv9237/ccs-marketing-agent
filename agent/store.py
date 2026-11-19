@@ -127,9 +127,32 @@ class WorkspaceStore:
 
     def get_brand(self, brand_id: str) -> dict:
         m = self._read_meta(self._dir(brand_id))
-        return {"brand_id": m["brand_id"], "name": m["name"], "industry": m["industry"], "docs": len(m["docs"])}
+        return {"brand_id": m["brand_id"], "name": m["name"], "industry": m["industry"], "docs": len(m["docs"]), "kit": m.get("kit", {})}
 
-    def create_brand(self, name: str, industry: str) -> dict:
+    @staticmethod
+    def _clean_kit(kit: dict | None) -> dict:
+        k = kit or {}
+        def txt(key, n):
+            return str(k.get(key, "") or "").strip()[:n]
+        tone = k.get("tone") or {}
+        cols = [c for c in (k.get("colours") or []) if isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c)][:8]
+        return {"audience": txt("audience", 200), "positioning": txt("positioning", 200), "avoid": txt("avoid", 200), "notes": txt("notes", 8000),
+                "tone": {n: max(0, min(100, int(tone.get(n, 50)))) for n in ("formal_casual", "reserved_bold", "factual_emotive")}, "colours": cols}
+
+    def update_brand(self, brand_id: str, name: str, industry: str, kit: dict | None) -> dict:
+        name, industry = (name or "").strip(), (industry or "").strip()
+        if not (2 <= len(name) <= 80):
+            raise StoreError("Brand name must be 2-80 characters.")
+        with _LOCK:
+            d = self._dir(brand_id)
+            meta = self._read_meta(d)
+            meta["name"], meta["industry"] = name, (industry or meta["industry"])[:80]
+            meta["kit"] = self._clean_kit(kit)
+            self._write_meta(d, meta)
+            self._push(brand_id)
+        return self.get_brand(brand_id)
+
+    def create_brand(self, name: str, industry: str, kit: dict | None = None) -> dict:
         name, industry = (name or "").strip(), (industry or "").strip()
         if not (2 <= len(name) <= 80):
             raise StoreError("Brand name must be 2-80 characters.")
@@ -141,7 +164,7 @@ class WorkspaceStore:
             brand_id = secrets.token_hex(6)
             d = self.root / brand_id
             d.mkdir(parents=True)
-            self._write_meta(d, {"brand_id": brand_id, "name": name, "industry": industry or "General", "created": time.time(), "docs": [], "embedder_id": None})
+            self._write_meta(d, {"brand_id": brand_id, "name": name, "industry": industry or "General", "created": time.time(), "docs": [], "embedder_id": None, "kit": self._clean_kit(kit)})
             self._push(brand_id)
         return self.get_brand(brand_id)
 

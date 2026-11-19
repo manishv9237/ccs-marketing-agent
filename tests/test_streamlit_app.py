@@ -92,6 +92,20 @@ class FakeSt:
     def slider(self, label, lo, hi, value=None, step=None, **kw):
         return self.values.get(label, value)
 
+    def container(self, *a, **kw):
+        return Ctx(self)
+
+    def radio(self, label, options, key=None, **kw):
+        opts = list(options)
+        cur = self.session_state.get(key) if key else None
+        return cur if cur in opts else (opts[0] if opts else None)
+
+    def color_picker(self, label, value="#000000", **kw):
+        return value
+
+    def checkbox(self, label, value=False, **kw):
+        return self.values.get(label, value)
+
     def chat_input(self, *a, **kw):
         return self.values.pop("chat_input", None)
 
@@ -161,11 +175,14 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     assert fake.session_state["user"] == "priya"
 
     # create a brand
-    fake.values.update({"Brand name": "Acme Foods", "Industry cluster": "FMCG & Consumer Brands"})
-    fake.clicks = {"Create brand"}
+    assert fake.session_state["nav"] == "Add brand"
+    fake.values.update({"Brand name": "Acme Foods", "Industry": "FMCG & Consumer Brands", "Target audience": "Indian families"})
+    fake.clicks = {"Save brand and continue"}
     run_script(fake, monkeypatch, svc)
     brands = svc.list_brands("priya")
     assert [b["name"] for b in brands] == ["Acme Foods"] and fake.session_state["sel_brand"] == brands[0]["brand_id"]
+    assert fake.session_state["nav"] == "Sources"
+    assert svc.store("priya").get_brand(brands[0]["brand_id"])["kit"]["audience"] == "Indian families"
 
     # paste a URL
     fake.values["One URL per line (max 15)"] = "https://acme.com/about"
@@ -173,7 +190,8 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     assert svc.list_documents("priya", brands[0]["brand_id"])
 
-    # generate
+    # generate (Brief page)
+    fake.session_state["nav"] = "Brief"
     fake.values["chat_input"] = "Announce the solar factory"
     run_script(fake, monkeypatch, svc)
     assert fake.session_state["gen_out"]["out"]["variations"][0]["content"].startswith("Solar powered")
@@ -185,7 +203,17 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     assert "Solar kit" in svc.list_recipes("priya", brands[0]["brand_id"])
 
-    # evaluation: setup then run a small balanced subset
+    # brand kit page lists the brand and can edit it
+    fake.session_state["nav"] = "Brand kit"
+    fake.clicks = {"Edit"}
+    run_script(fake, monkeypatch, svc)
+    fake.values["Target audience"] = "Everyone"
+    fake.clicks = {"Save changes"}
+    run_script(fake, monkeypatch, svc)
+    assert svc.store("priya").get_brand(brands[0]["brand_id"])["kit"]["audience"] == "Everyone"
+
+    # evaluation lives on the account page
+    fake.session_state["nav"] = "Account"
     fake.clicks = {"Step 1: Set up the 4 evaluation brands (Swiggy, Marico, HDFC Bank, Infosys)"}
     run_script(fake, monkeypatch, svc)
     assert len(svc.list_brands("priya")) == 5
@@ -217,7 +245,8 @@ def test_signup_then_login_and_private_workspace(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     uid = fake.session_state["user"]
     assert uid.startswith("u") and fake.session_state["display"] == "Priya"
-    # log out, then log back in with e-mail + password; wrong password fails
+    # log out (Account page), then log back in with e-mail + password; wrong password fails
+    fake.session_state["nav"] = "Account"
     fake.clicks = {"Log out"}
     run_script(fake, monkeypatch, svc)
     fake.values = {"Email or username": "priya@example.com", "Password": "nope"}

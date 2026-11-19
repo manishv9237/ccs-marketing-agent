@@ -78,16 +78,50 @@ class Service:
     def list_brands(self, user: str) -> list[dict]:
         return self.store(user).list_brands()
 
-    def create_brand(self, user: str, name: str, industry: str, voice_notes: str = "") -> dict:
-        st = self.store(user)
-        brand = st.create_brand(name, industry)
-        notes = (voice_notes or "").strip()
-        if len(notes) >= 20:
+    @staticmethod
+    def kit_text(kit: dict) -> str:
+        """Plain-text version of the brand kit, indexed as a source so generation can follow it."""
+        k = kit or {}
+        tone = k.get("tone") or {}
+        def lean(v, a, b):
+            v = int(v if v is not None else 50)
+            return a if v < 40 else (b if v > 60 else "")
+        parts = [f"Target audience: {k['audience']}" if k.get("audience") else "", f"Positioning: {k['positioning']}" if k.get("positioning") else ""]
+        leans = [x for x in (lean(tone.get("formal_casual"), "formal", "casual"), lean(tone.get("reserved_bold"), "reserved", "bold"),
+                             lean(tone.get("factual_emotive"), "factual", "emotive")) if x]
+        parts.append("Tone: " + ", ".join(leans) if leans else "")
+        parts.append("Brand colours: " + ", ".join(k["colours"]) if k.get("colours") else "")
+        parts.append(f"Words to avoid: {k['avoid']}" if k.get("avoid") else "")
+        parts.append(k.get("notes", ""))
+        return "\n".join(x for x in parts if x)
+
+    NOTES_DOC = "Brand voice & guidelines (typed)"
+
+    def _sync_notes_doc(self, st, brand_id: str, kit: dict) -> None:
+        for d in st.list_documents(brand_id):
+            if d["name"] == self.NOTES_DOC:
+                st.delete_document(brand_id, d["doc_id"])
+        text = self.kit_text(kit).strip()
+        if len(text) >= 20:
             try:
-                st.add_document(brand["brand_id"], "Brand voice & guidelines (typed)", "notes", chunk_text(notes[:20000]), self.embedder)
+                st.add_document(brand_id, self.NOTES_DOC, "notes", chunk_text(text[:20000]), self.embedder)
             except StoreError:
                 pass
+
+    def create_brand(self, user: str, name: str, industry: str, voice_notes: str = "", kit: dict | None = None) -> dict:
+        st = self.store(user)
+        kit = dict(kit or {})
+        if voice_notes and not kit.get("notes"):
+            kit["notes"] = voice_notes
+        brand = st.create_brand(name, industry, kit)
+        self._sync_notes_doc(st, brand["brand_id"], kit)
         return st.get_brand(brand["brand_id"])
+
+    def update_brand(self, user: str, brand_id: str, name: str, industry: str, kit: dict | None) -> dict:
+        st = self.store(user)
+        brand = st.update_brand(brand_id, name, industry, kit)
+        self._sync_notes_doc(st, brand_id, brand["kit"])
+        return st.get_brand(brand_id)
 
     def delete_brand(self, user: str, brand_id: str) -> None:
         self.store(user).delete_brand(brand_id)

@@ -98,7 +98,53 @@ class AccountStore:
             os.replace(tmp, self._path(aid))
             if self.sync is not None:
                 self.sync.push_file(OWNER, f"accounts/{aid}.json", self._path(aid))
-        return {"id": aid, "name": first}
+        return {"id": aid, "name": first, "full_name": f"{first} {last}".strip()}
+
+    # ------------------------------------------------------------------- profile
+    def get(self, aid: str) -> dict | None:
+        """{"first_name", "last_name", "email", "full_name"} for a self-service account, else None."""
+        if not re.match(r"^u[0-9a-f]{12}$", aid or ""):
+            return None
+        rec = self._read(aid)
+        if not rec:
+            return None
+        return {"first_name": rec["first_name"], "last_name": rec["last_name"], "email": rec["email"],
+                "full_name": f"{rec['first_name']} {rec['last_name']}".strip()}
+
+    def _save(self, rec: dict) -> None:
+        tmp = self._path(rec["id"]).with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec), encoding="utf-8")
+        os.replace(tmp, self._path(rec["id"]))
+        if self.sync is not None:
+            self.sync.push_file(OWNER, f"accounts/{rec['id']}.json", self._path(rec["id"]))
+
+    def update_profile(self, aid: str, first: str, last: str) -> dict:
+        first, last = (first or "").strip(), (last or "").strip()
+        if not (1 <= len(first) <= 40) or len(last) > 40:
+            raise AccountError("Please enter your first name (up to 40 characters) and a last name of up to 40.")
+        with _LOCK:
+            rec = self._read(aid) if re.match(r"^u[0-9a-f]{12}$", aid or "") else None
+            if not rec:
+                raise AccountError("This login does not have an editable profile.")
+            rec["first_name"], rec["last_name"] = first, last
+            self._save(rec)
+        return {"name": first, "full_name": f"{first} {last}".strip()}
+
+    def change_password(self, aid: str, old: str, new: str, confirm: str) -> None:
+        with _LOCK:
+            rec = self._read(aid) if re.match(r"^u[0-9a-f]{12}$", aid or "") else None
+            if not rec:
+                raise AccountError("This login does not have an editable password.")
+            if not hmac.compare_digest(_hash(old or "", bytes.fromhex(rec["salt"])), rec["hash"]):
+                time.sleep(0.5)
+                raise AccountError("Your current password is not correct.")
+            if len(new or "") < MIN_PASSWORD or len(new) > 128:
+                raise AccountError(f"Choose a new password of at least {MIN_PASSWORD} characters.")
+            if new != confirm:
+                raise AccountError("The two new passwords do not match.")
+            salt = secrets.token_bytes(16)
+            rec["salt"], rec["hash"] = salt.hex(), _hash(new, salt)
+            self._save(rec)
 
     # ------------------------------------------------------------------- log in
     def verify(self, email: str, password: str) -> dict | None:
@@ -108,6 +154,6 @@ class AccountStore:
         salt = bytes.fromhex(rec["salt"]) if rec else b"\x00" * 16
         digest = _hash(password or "", salt)
         if rec and hmac.compare_digest(digest, rec["hash"]):
-            return {"id": rec["id"], "name": rec["first_name"]}
+            return {"id": rec["id"], "name": rec["first_name"], "full_name": f"{rec['first_name']} {rec['last_name']}".strip()}
         time.sleep(0.5)
         return None

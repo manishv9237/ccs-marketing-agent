@@ -334,7 +334,6 @@ def kit_fields(prefix: str, brand: dict | None = None):
     """Brand kit inputs (inside a form). Returns (name, industry, kit dict)."""
     kit = (brand or {}).get("kit") or {}
     tone0 = kit.get("tone") or {}
-    cols0 = kit.get("colours") or []
     c1, c2 = st.columns(2)
     name = c1.text_input("Brand name", value=(brand or {}).get("name", ""), max_chars=80, placeholder="e.g. Marico", key=f"{prefix}_name")
     cur_ind = (brand or {}).get("industry")
@@ -349,15 +348,10 @@ def kit_fields(prefix: str, brand: dict | None = None):
         a.markdown(f"<div style='text-align:right;padding-top:0.3rem'>{left}</div>", unsafe_allow_html=True)
         tone[key_] = b_.slider(f"{left} to {right}", 0, 100, int(tone0.get(key_, 50)), label_visibility="collapsed", key=f"{prefix}_tone_{key_}")
         c.markdown(f"<div style='padding-top:0.3rem'>{right}</div>", unsafe_allow_html=True)
-    st.markdown("**Brand colours**")
-    use_cols = st.checkbox("Include brand colours", value=bool(cols0), key=f"{prefix}_usecols")
-    defaults = (cols0 + ["#00843d", "#f4a900", "#1c1a17", "#5b4bdb"])[:4]
-    pickers = st.columns(4)
-    colours = [(pickers[i].color_picker(f"Colour {i + 1}", defaults[i], key=f"{prefix}_col{i}") or defaults[i]) for i in range(4)]
     avoid = st.text_input("Words to avoid", value=kit.get("avoid", ""), max_chars=200, placeholder="comma separated, e.g. cheap, miracle, guaranteed", key=f"{prefix}_avoid")
     notes = st.text_area("Brand voice & guidelines (optional)", value=kit.get("notes", ""), max_chars=8000, height=110, key=f"{prefix}_notes",
                          placeholder="Tone of voice, words you always/never use, taglines…")
-    return name, ind, {"audience": aud, "positioning": pos, "tone": tone, "colours": colours if use_cols else [], "avoid": avoid, "notes": notes}
+    return name, ind, {"audience": aud, "positioning": pos, "tone": tone, "colours": [], "avoid": avoid, "notes": notes}
 
 
 # ================================================================== ADD BRAND
@@ -502,8 +496,6 @@ elif page == "Brand kit":
             if kit.get("tone"):
                 t_ = kit["tone"]
                 st.caption(" · ".join(f"{l}–{r}: {t_.get(k, 50)}" for k, l, r in _TONES))
-            if kit.get("colours"):
-                st.markdown("".join(f'<span class="bca-swatch" style="background:{c}"></span>' for c in kit["colours"]), unsafe_allow_html=True)
             if kit.get("avoid"):
                 st.markdown(f"**Words to avoid:** {kit['avoid']}")
             if ss.get("confirm_del") == bid:

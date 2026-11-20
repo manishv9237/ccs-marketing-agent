@@ -25,7 +25,7 @@ from agent.extract import SUPPORTED_FILE_TYPES  # noqa: E402
 from agent.generate import PLATFORMS  # noqa: E402
 from agent.industries import INDUSTRY_CLUSTERS  # noqa: E402
 from agent import review  # noqa: E402
-from agent.accounts import AccountError  # noqa: E402
+from agent.accounts import AccountError, account_id  # noqa: E402
 from agent.limits import LimitReached  # noqa: E402
 from agent.security import check_login, normalize_username  # noqa: E402
 from agent.service import USER_ERRORS, Service  # noqa: E402
@@ -319,7 +319,11 @@ labels = {b["brand_id"]: f"{b['name']} · {b['industry']}" for b in brands}
 if ss.get("sel_brand") not in ids:
     ss["sel_brand"] = ids[0] if ids else None
 
-SHOW_EVALUATE = True  # testing tool for the project team; set False (or delete the Evaluate page) before real users
+# Evaluate is a testing tool: shown only to the admin account(s) listed in ADMIN_EMAILS
+# (comma-separated; set it in Streamlit Secrets). Everyone else never sees the page.
+_ADMIN_EMAILS = os.getenv("ADMIN_EMAILS", "manish.varma@mail.com")
+_ADMIN_IDS = {x for e in _ADMIN_EMAILS.split(",") if e.strip() for x in (account_id(e), e.strip().lower())}
+SHOW_EVALUATE = user in _ADMIN_IDS
 PAGES = ["Add brand", "Brand kit", "Sources", "Brief"] + (["Evaluate"] if SHOW_EVALUATE else []) + ["Account"]
 if "goto" in ss:
     ss["nav"] = ss.pop("goto")

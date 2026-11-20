@@ -64,7 +64,9 @@ Free hosting wipes stored brands when the app restarts, so re-run the Evaluate p
 
 Top bar: **Add brand** (brand kit form; saving moves to Sources), **Brand kit** (all brands, edit/delete), **Sources** (pick a brand, upload / discover / paste URLs), **Brief** (chat-style generation with channel, model, variations, top-k, hybrid and recipes), **Evaluate** (testing tool) and your name (edit name, change password, theme, log out).
 
-## Evaluate page (testing only; hide with SHOW_EVALUATE = False)
+## Evaluate page (testing only; admin-only)
+
+The Evaluate tab is visible only to the admin account(s) listed in `ADMIN_EMAILS` (comma-separated emails; default `manish.varma@mail.com`; set it in Streamlit Secrets). Other users never see it.
 
 The "Evaluate" tab in the top bar tests the agent on 8 major brands from different sectors (Swiggy, Marico, HDFC Bank, Infosys, Apollo Hospitals, Tata Motors, IndiGo, Tata Power) x 4 platforms (LinkedIn, X, Instagram, email) x 4 campaign goals = 64 posts in a full run (32 already meets the 30-per-category minimum). Step 1 loads each brand's sources from the web. Step 2 generates every post with one model and scores it 1-5 (grounded, on-brand, goal relevance, platform fit) with a different model as judge, then gives summaries by brand, platform and goal plus a CSV. Top-k and the keyword/semantic blend can be changed to compare retrieval settings. Scores come from a language-model judge: guidance, not proof. Limits: `EVAL_PER_USER_DAY` (default 400), `EVAL_GLOBAL_DAY` (default 800), optional `EVAL_USERS`.
 

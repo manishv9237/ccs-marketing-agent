@@ -212,7 +212,13 @@ def test_login_required_then_full_journey(svc, monkeypatch):
     run_script(fake, monkeypatch, svc)
     assert svc.store("priya").get_brand(brands[0]["brand_id"])["kit"]["audience"] == "Everyone"
 
-    # evaluation has its own (testing-only) page
+    # evaluation is admin-only: a normal user cannot reach it
+    fake.session_state["nav"] = "Evaluate"
+    run_script(fake, monkeypatch, svc)
+    assert fake.session_state["nav"] != "Evaluate"
+
+    # ...but the admin account (ADMIN_EMAILS) has the testing page
+    monkeypatch.setenv("ADMIN_EMAILS", "priya")
     fake.session_state["nav"] = "Evaluate"
     fake.clicks = {"Step 1: Set up the evaluation brands"}
     run_script(fake, monkeypatch, svc)
